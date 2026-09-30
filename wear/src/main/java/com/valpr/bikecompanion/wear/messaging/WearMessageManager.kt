@@ -2,17 +2,17 @@ package com.valpr.bikecompanion.wear.messaging
 
 import android.content.Context
 import android.util.Log
-import com.valpr.bikecompanion.shared.HapticAlertType
-import com.valpr.bikecompanion.shared.HeartRateBatch
-import com.valpr.bikecompanion.shared.WearableProtocol
-import com.valpr.bikecompanion.shared.WorkoutStateMessage
-import com.valpr.bikecompanion.wear.haptics.WatchHapticManager
 import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Node
 import com.google.android.gms.wearable.NodeClient
 import com.google.android.gms.wearable.Wearable
+import com.valpr.bikecompanion.shared.HapticAlertType
+import com.valpr.bikecompanion.shared.HeartRateBatch
+import com.valpr.bikecompanion.shared.WearableProtocol
+import com.valpr.bikecompanion.shared.WorkoutStateMessage
+import com.valpr.bikecompanion.wear.haptics.WatchHapticManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,7 +20,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
@@ -106,7 +105,10 @@ class WearMessageManager(
      */
     fun updateWorkoutState(state: WorkoutStateMessage) {
         _workoutState.value = state
-        Log.d(TAG, "Updated workout state: status=${state.sessionStatus}, target=${state.targetWatts}W, hr=${state.heartRateBpm}")
+        Log.d(
+            TAG,
+            "Updated workout state: status=${state.sessionStatus}, target=${state.targetWatts}W, hr=${state.heartRateBpm}"
+        )
     }
 
     /**

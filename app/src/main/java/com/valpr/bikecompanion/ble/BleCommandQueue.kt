@@ -128,10 +128,7 @@ class BleCommandQueue(
 
     @Suppress("DEPRECATION")
     @SuppressLint("MissingPermission")
-    private fun executeWriteCharacteristic(
-        gatt: BluetoothGatt,
-        command: BleCommand.WriteCharacteristic
-    ): Boolean {
+    private fun executeWriteCharacteristic(gatt: BluetoothGatt, command: BleCommand.WriteCharacteristic): Boolean {
         onPacketSent(command.data, command.description)
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val res = gatt.writeCharacteristic(
@@ -149,10 +146,7 @@ class BleCommandQueue(
 
     @Suppress("DEPRECATION")
     @SuppressLint("MissingPermission")
-    private fun executeWriteDescriptor(
-        gatt: BluetoothGatt,
-        command: BleCommand.WriteDescriptor
-    ): Boolean {
+    private fun executeWriteDescriptor(gatt: BluetoothGatt, command: BleCommand.WriteDescriptor): Boolean {
         onPacketSent(command.data, command.description)
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val res = gatt.writeDescriptor(

@@ -10,7 +10,10 @@ object MacValidator {
 
     fun validate(input: String): Result<String> {
         val normalized = normalize(input)
-        return if (isValid(normalized)) Result.success(normalized)
-        else Result.failure(IllegalArgumentException("Invalid MAC address: $input"))
+        return if (isValid(normalized)) {
+            Result.success(normalized)
+        } else {
+            Result.failure(IllegalArgumentException("Invalid MAC address: $input"))
+        }
     }
 }

@@ -6,7 +6,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MacValidatorTest {
-
     @Test
     fun validMac_passes() {
         assertTrue(MacValidator.isValid("AA:BB:CC:DD:EE:FF"))

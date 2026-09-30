@@ -14,10 +14,7 @@ import com.valpr.bikecompanion.workout.WorkoutSessionState
  */
 object WorkoutNotificationContent {
 
-    fun buildTitle(
-        session: WorkoutSessionState,
-        connState: BleConnectionState
-    ): String {
+    fun buildTitle(session: WorkoutSessionState, connState: BleConnectionState): String {
         val telem = session.latestTelemetry
         return when {
             session.status == SessionStatus.RUNNING -> {
@@ -46,12 +43,11 @@ object WorkoutNotificationContent {
         else -> ""
     }
 
-    fun selectedTime(session: WorkoutSessionState): String =
-        if (session.status == SessionStatus.RUNNING) {
-            session.formattedElapsedTime
-        } else {
-            session.latestTelemetry.formattedElapsedTime
-        }
+    fun selectedTime(session: WorkoutSessionState): String = if (session.status == SessionStatus.RUNNING) {
+        session.formattedElapsedTime
+    } else {
+        session.latestTelemetry.formattedElapsedTime
+    }
 
     fun buildContent(session: WorkoutSessionState): String {
         val telem = session.latestTelemetry

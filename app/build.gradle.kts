@@ -37,8 +37,9 @@ android {
         create("release") {
             // Optional: only used when release.keystore / KEYSTORE_FILE is set.
             // Otherwise the release build stays unsigned (assembleDebug unaffected).
-            val keystorePath = System.getenv("KEYSTORE_FILE")
-                ?: project.findProperty("release.keystore")?.toString()
+            val keystorePath =
+                System.getenv("KEYSTORE_FILE")
+                    ?: project.findProperty("release.keystore")?.toString()
             if (!keystorePath.isNullOrBlank()) {
                 storeFile = file(keystorePath)
                 storePassword = System.getenv("KEYSTORE_PASSWORD")
@@ -56,8 +57,9 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
-            val keystorePath = System.getenv("KEYSTORE_FILE")
-                ?: project.findProperty("release.keystore")?.toString()
+            val keystorePath =
+                System.getenv("KEYSTORE_FILE")
+                    ?: project.findProperty("release.keystore")?.toString()
             if (!keystorePath.isNullOrBlank()) {
                 signingConfig = signingConfigs.getByName("release")
             }
@@ -79,6 +81,12 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+    lint {
+        lintConfig = rootProject.file("lint.xml")
+        abortOnError = true
+        checkReleaseBuilds = false
+        warningsAsErrors = false
     }
 }
 
@@ -115,7 +123,6 @@ dependencies {
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.androidx.ui.test.manifest)
-
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

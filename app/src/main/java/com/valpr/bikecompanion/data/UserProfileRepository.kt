@@ -81,9 +81,7 @@ data class UserProfile(
 /**
  * Repository backed by Jetpack DataStore Preferences for persisting athlete profile settings.
  */
-class UserProfileRepository(
-    private val dataStore: DataStore<Preferences>
-) {
+class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
     companion object {
         val KEY_FTP = intPreferencesKey("athlete_ftp")
         val KEY_WEIGHT_KG = floatPreferencesKey("athlete_weight_kg")
@@ -182,12 +180,7 @@ class UserProfileRepository(
         }
     }
 
-    suspend fun updateAthleteBio(
-        age: Int,
-        weightKg: Float,
-        heightCm: Float,
-        sex: BiologicalSex
-    ) {
+    suspend fun updateAthleteBio(age: Int, weightKg: Float, heightCm: Float, sex: BiologicalSex) {
         dataStore.edit { preferences ->
             preferences[KEY_AGE] = age.coerceIn(10, 120)
             preferences[KEY_WEIGHT_KG] = weightKg.coerceAtLeast(20.0f)

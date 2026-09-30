@@ -110,11 +110,45 @@ class WorkoutRepositoryTest {
 
         repository.importSampleWorkoutsIfEmpty()
         val seeded = repository.getCachedWorkouts()
-        assertEquals(2, seeded.size)
+        assertEquals(6, seeded.size)
 
         // Running a second time should not duplicate files
         repository.importSampleWorkoutsIfEmpty()
+        assertEquals(6, repository.getCachedWorkouts().size)
+    }
+
+    @Test
+    fun ensureSampleWorkouts_backfillsBeginnerPathForExistingUsers() {
+        // Simulate a pre-existing user with only the two legacy samples.
+        repository.saveWorkout("sweet_spot_intervals.zwo", WorkoutRepository.SAMPLE_SWEET_SPOT)
+        repository.saveWorkout("ftp_ramp_test.zwo", WorkoutRepository.SAMPLE_RAMP_TEST)
         assertEquals(2, repository.getCachedWorkouts().size)
+
+        repository.importSampleWorkoutsIfEmpty()
+
+        val names = repository.getCachedWorkouts().map { it.filename }
+        assertEquals(6, names.size)
+        assertTrue(names.contains("beginner_01_first_pedals.zwo"))
+        assertTrue(names.contains("beginner_02_building_rhythm.zwo"))
+        assertTrue(names.contains("beginner_03_steady_confidence.zwo"))
+        assertTrue(names.contains("beginner_04_ready_for_more.zwo"))
+    }
+
+    @Test
+    fun ensureSampleWorkouts_neverOverwritesUserModifiedFiles() {
+        repository.importSampleWorkoutsIfEmpty()
+        val customXml = """
+            <workout_file>
+                <name>My Custom Take</name>
+                <workout><SteadyState Duration="600" Power="0.60"/></workout>
+            </workout_file>
+        """.trimIndent()
+        repository.saveWorkout("beginner_01_first_pedals.zwo", customXml)
+
+        repository.importSampleWorkoutsIfEmpty()
+
+        val reloaded = repository.loadWorkout("beginner_01_first_pedals.zwo").getOrThrow()
+        assertEquals("My Custom Take", reloaded.name)
     }
 
     @Test

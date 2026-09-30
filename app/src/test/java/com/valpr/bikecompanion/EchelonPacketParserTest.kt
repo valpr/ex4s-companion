@@ -42,7 +42,7 @@ class EchelonPacketParserTest {
             this[7] = 0x00.toByte() // distance high
             this[8] = 0xF5.toByte() // distance low (245 -> 2.45 km)
             this[9] = 0x00.toByte()
-            this[10] = 88.toByte()  // cadence (88 RPM)
+            this[10] = 88.toByte() // cadence (88 RPM)
             this[11] = 0x00.toByte()
             this[12] = 0x00.toByte()
         }

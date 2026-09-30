@@ -90,7 +90,7 @@ This document contains mandatory guidelines, invariants, and hard-learned lesson
 
 ---
 
-## 7. Health Connect Invariants
+## 6. Health Connect Invariants
 * **Batch on completion, never during the workout:**
   * Health Connect is cold storage with rate limits, not a real-time bus. Buffer samples in-memory during the session; write once via `insertRecords()` when the summary is generated.
 * **Clamp every sample timestamp into `[start, end]`:**
@@ -107,26 +107,20 @@ This document contains mandatory guidelines, invariants, and hard-learned lesson
 
 ---
 
-## 6. Verification Protocol Before Completing Any Phase
-1. **Rerun all tests cleanly:**
-   ```powershell
-   $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat test --rerun-tasks
-   ```
-2. **Assemble the debug APK:**
-   ```powershell
-   $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat assembleDebug
-   ```
-3. **Verify compiler warnings:** Ensure no deprecated API icons or unused ViewModel bindings are introduced.
-
-**Build performance (measured 2026-09-29, warm daemon, full gate ~26s):**
-* `gradle.properties` enables `parallel`, `caching`, and `configuration-cache` — all verified compatible with AGP 9 / Kotlin 2.0 (`Configuration cache entry reused` on repeat runs). Do not remove them without re-measuring.
-* `:app` unit tests run classes across parallel forks (`maxParallelForks = cores/2`, `maxHeapSize = 2g`) — measured ~3s saving on the full gate, and isolates the heavy Robolectric UI class from the plain-JUnit suites.
-* Inner loop (no `--rerun-tasks`): targeted plain-JUnit class ~4s, `WorkoutUiSemanticsTest` alone ~9s, no-op `test assembleDebug` ~2s. Iterate with:
-  ```powershell
-  $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat :app:testDebugUnitTest --tests "com.valpr.bikecompanion.MyTest"
-  ```
-  Keep the full `test --rerun-tasks` gate above as the phase-completion check — never narrow it to green a phase.
-* Robolectric is pinned to 4.17 (not 4.13): 4.13's bundled ASM cannot read Java 25 class files (this machine's JBR is 25.x) and crashes every test teardown in `RoboCookieManager` reset. Do not downgrade without re-verifying on this JDK.
+## 7. Linting, Formatting & Code Quality Invariants
+* **Line Ending Discipline on Windows:**
+  * Spotless must remain configured with `LineEnding.UNIX` and paired with `.gitattributes` (`* text=auto eol=lf`). On Windows, default Spotless behavior converts `\n` to `\r\n`, creating massive false-positive diff churn across checkouts.
+* **Windows Drive Delimiter in `.properties` Files (`PropertyEscape`):**
+  * In `.properties` files (like `gradle.properties`), Windows drive colons must be escaped: `org.gradle.java.home=C\:/Program Files/...`. An unescaped `:` acts as a key-value delimiter in standard Java properties and immediately fails Android Lint with `[PropertyEscape]`.
+* **Wear Capabilities `UnusedResources` False Positive:**
+  * `res/values/wear.xml` defining `android_wear_capabilities` is consumed dynamically by Google Play Services / Wear OS capability discovery at runtime, not referenced as an `R.array` symbol in Kotlin code. Android Lint flags this as `UnusedResources`. It must remain explicitly suppressed in `lint.xml`.
+* **Jetpack Compose & StateFlow Naming Discipline:**
+  * Jetpack Compose functions returning `Unit` use PascalCase (e.g., `@Composable fun ActiveTelemetryScreen(...)`). Ktlint's `standard:function-naming` must remain disabled in `.editorconfig` and `editorConfigOverride`.
+  * Private `MutableStateFlow` fields must not use leading underscores (e.g. `_phoneNodeId`) unless a matching public property or getter exists, or ktlint flags `standard:backing-property-naming`.
+* **Conventional Commits Invariant:**
+  * Commits are validated by `.githooks/commit-msg` against `^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_\-\/]+\))?: .+`. Commits with vague subjects (e.g. `"wip"`, `"fixed"`) will be rejected.
+* **Pre-Commit Latency Discipline (< 1.5s):**
+  * The `.githooks/pre-commit` hook runs exclusively on staged files (`git diff --cached`). Never invoke heavy tasks (full test suite, Android Lint, or full-project builds) in `pre-commit`. Fast checks include: merge conflict markers, secret/key leaks, and [AGENTS.md](file:///C:/Users/Andrew/lw-bike-companion/AGENTS.md) banned imports (`android.util.Log` in `:shared`, hardcoded `Dispatchers.IO` in `BleCommandQueue.kt`).
 
 ---
 
@@ -145,3 +139,40 @@ This document contains mandatory guidelines, invariants, and hard-learned lesson
 * **Fail loudly on misconfiguration; capture dispatches as lists:**
   * Engine guards (e.g., missing FTP for structured workouts) must return `Result.failure`, never silently fall back to phantom targets (200W) — UI-only gates are bypassable by service/watch callers.
   * Tests that assert BLE dispatches must record into a `MutableList<Int>` (not a single `lastSent` slot) so duplicate/unwanted writes are detectable.
+
+---
+
+## 9. Verification Protocol & Quality Gates Before Completing Any Phase
+1. **Verify code formatting with Spotless:**
+   ```powershell
+   $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat spotlessCheck
+   ```
+   *(If formatting issues are found, auto-format with `.\gradlew.bat spotlessApply`).*
+2. **Verify static analysis with Android Lint:**
+   ```powershell
+   $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat lintDebug
+   ```
+   *(Ensure 0 errors across `:app`, `:shared`, `:wear`; all expected suppressions live in `lint.xml`).*
+3. **Rerun all tests cleanly:**
+   ```powershell
+   $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat test --rerun-tasks
+   ```
+4. **Assemble the debug APK:**
+   ```powershell
+   $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat assembleDebug
+   ```
+5. **Verify compiler warnings:** Ensure no deprecated API icons or unused ViewModel bindings are introduced.
+6. **Ensure Git hooks remain configured:**
+   ```powershell
+   $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat installGitHooks
+   ```
+
+**Build performance (measured 2026-09-29, warm daemon, full gate ~26s):**
+* `gradle.properties` enables `parallel`, `caching`, and `configuration-cache` — all verified compatible with AGP 9 / Kotlin 2.0 (`Configuration cache entry reused` on repeat runs). Do not remove them without re-measuring.
+* `:app` unit tests run classes across parallel forks (`maxParallelForks = cores/2`, `maxHeapSize = 2g`) — measured ~3s saving on the full gate, and isolates the heavy Robolectric UI class from the plain-JUnit suites.
+* Inner loop (no `--rerun-tasks`): targeted plain-JUnit class ~4s, `WorkoutUiSemanticsTest` alone ~9s, no-op `test assembleDebug` ~2s. Iterate with:
+  ```powershell
+  $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat :app:testDebugUnitTest --tests "com.valpr.bikecompanion.MyTest"
+  ```
+  Keep the full `test --rerun-tasks` gate above as the phase-completion check — never narrow it to green a phase.
+* Robolectric is pinned to 4.17 (not 4.13): 4.13's bundled ASM cannot read Java 25 class files (this machine's JBR is 25.x) and crashes every test teardown in `RoboCookieManager` reset. Do not downgrade without re-verifying on this JDK.

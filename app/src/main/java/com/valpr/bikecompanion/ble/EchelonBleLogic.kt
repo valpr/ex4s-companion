@@ -19,17 +19,15 @@ object EchelonBleLogic {
      * @param hasEchelonServiceUuid true when the scan record carries the
      *   proprietary Echelon GATT service UUID.
      */
-    fun isEchelonDevice(resolvedName: String, hasEchelonServiceUuid: Boolean): Boolean {
-        return resolvedName.contains("ECH", ignoreCase = true) ||
-            resolvedName.contains("ECHELON", ignoreCase = true) ||
-            resolvedName.contains("SPORT", ignoreCase = true) ||
-            resolvedName.contains("EX-", ignoreCase = true) ||
-            resolvedName.contains("EX4", ignoreCase = true) ||
-            resolvedName.contains("EX5", ignoreCase = true) ||
-            resolvedName.contains("EX3", ignoreCase = true) ||
-            resolvedName.contains("BIKE", ignoreCase = true) ||
-            hasEchelonServiceUuid
-    }
+    fun isEchelonDevice(resolvedName: String, hasEchelonServiceUuid: Boolean): Boolean = resolvedName.contains("ECH", ignoreCase = true) ||
+        resolvedName.contains("ECHELON", ignoreCase = true) ||
+        resolvedName.contains("SPORT", ignoreCase = true) ||
+        resolvedName.contains("EX-", ignoreCase = true) ||
+        resolvedName.contains("EX4", ignoreCase = true) ||
+        resolvedName.contains("EX5", ignoreCase = true) ||
+        resolvedName.contains("EX3", ignoreCase = true) ||
+        resolvedName.contains("BIKE", ignoreCase = true) ||
+        hasEchelonServiceUuid
 
     /**
      * Next keep-alive counter after sending [current]. Wraps 255 -> 1;

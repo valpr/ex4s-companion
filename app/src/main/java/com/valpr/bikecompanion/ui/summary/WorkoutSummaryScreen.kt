@@ -17,11 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DirectionsBike
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -238,33 +234,45 @@ private fun HealthSyncCard(
     val subtitle: String
     when (state) {
         is HealthSyncState.Success -> {
-            containerColor = Color(0xFF00331C); icon = Icons.Default.CheckCircle
-            iconTint = Color(0xFF00E676); title = "Synced to Health Connect"
+            containerColor = Color(0xFF00331C)
+            icon = Icons.Default.CheckCircle
+            iconTint = Color(0xFF00E676)
+            title = "Synced to Health Connect"
             subtitle = "Exercise, heart rate, power & calories saved"
         }
         is HealthSyncState.Syncing -> {
-            containerColor = MaterialTheme.colorScheme.surfaceVariant; icon = Icons.Default.Sync
-            iconTint = MaterialTheme.colorScheme.primary; title = "Syncing to Health Connect…"
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            icon = Icons.Default.Sync
+            iconTint = MaterialTheme.colorScheme.primary
+            title = "Syncing to Health Connect…"
             subtitle = "Writing exercise session records"
         }
         is HealthSyncState.Failed -> {
-            containerColor = Color(0xFF3E1414); icon = Icons.Default.Warning
-            iconTint = Color(0xFFFF8A80); title = "Health Connect sync failed"
+            containerColor = Color(0xFF3E1414)
+            icon = Icons.Default.Warning
+            iconTint = Color(0xFFFF8A80)
+            title = "Health Connect sync failed"
             subtitle = state.reason
         }
         is HealthSyncState.PermissionRequired -> {
-            containerColor = Color(0xFF2C2210); icon = Icons.Default.Warning
-            iconTint = Color(0xFFFFB300); title = "Health Connect permissions needed"
+            containerColor = Color(0xFF2C2210)
+            icon = Icons.Default.Warning
+            iconTint = Color(0xFFFFB300)
+            title = "Health Connect permissions needed"
             subtitle = "Grant access to save this workout"
         }
         is HealthSyncState.NotAvailable -> {
-            containerColor = MaterialTheme.colorScheme.surfaceVariant; icon = Icons.Default.Warning
-            iconTint = Color.Gray; title = "Health Connect unavailable"
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            icon = Icons.Default.Warning
+            iconTint = Color.Gray
+            title = "Health Connect unavailable"
             subtitle = "Install or enable Health Connect to sync"
         }
         is HealthSyncState.Idle -> {
-            containerColor = MaterialTheme.colorScheme.surfaceVariant; icon = Icons.Default.Sync
-            iconTint = Color.Gray; title = "Health Connect"
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            icon = Icons.Default.Sync
+            iconTint = Color.Gray
+            title = "Health Connect"
             subtitle = "Sync this workout on completion"
         }
     }
@@ -286,7 +294,9 @@ private fun HealthSyncCard(
                 )
             } else {
                 Icon(
-                    icon, contentDescription = null, tint = iconTint,
+                    icon,
+                    contentDescription = null,
+                    tint = iconTint,
                     modifier = Modifier.padding(end = 12.dp)
                 )
             }
@@ -304,9 +314,7 @@ private fun HealthSyncCard(
 }
 
 @Composable
-fun PowerHistoryChart(    samples: List<WorkoutMetricSample>,
-    modifier: Modifier = Modifier
-) {
+fun PowerHistoryChart(samples: List<WorkoutMetricSample>, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
@@ -362,10 +370,7 @@ fun PowerHistoryChart(    samples: List<WorkoutMetricSample>,
 }
 
 @Composable
-fun HrHistoryChart(
-    samples: List<WorkoutMetricSample>,
-    modifier: Modifier = Modifier
-) {
+fun HrHistoryChart(samples: List<WorkoutMetricSample>, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))

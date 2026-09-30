@@ -19,7 +19,8 @@ data class BikeTelemetry(
 }
 
 enum class PacketDirection {
-    RX, TX
+    RX,
+    TX
 }
 
 data class PacketLogEntry(
@@ -37,8 +38,8 @@ data class PacketLogEntry(
         if (javaClass != other?.javaClass) return false
         other as PacketLogEntry
         return timestampMs == other.timestampMs &&
-                direction == other.direction &&
-                rawBytes.contentEquals(other.rawBytes)
+            direction == other.direction &&
+            rawBytes.contentEquals(other.rawBytes)
     }
 
     override fun hashCode(): Int {

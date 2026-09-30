@@ -8,9 +8,9 @@ import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.PowerRecord
+import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.metadata.Device
 import androidx.health.connect.client.records.metadata.Metadata
-import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.units.Energy
 import androidx.health.connect.client.units.Power
 import com.valpr.bikecompanion.workout.WorkoutSummary
@@ -40,10 +40,7 @@ sealed interface HealthSyncState {
 /**
  * Availability + permission snapshot for Settings display.
  */
-data class HealthConnectionStatus(
-    val providerAvailable: Boolean? = null,
-    val permissionsGranted: Boolean? = null
-)
+data class HealthConnectionStatus(val providerAvailable: Boolean? = null, val permissionsGranted: Boolean? = null)
 
 /** Plain HR point (JVM-safe, no Health Connect dependency). */
 data class HrPoint(val timeEpochMs: Long, val bpm: Int)
@@ -97,11 +94,7 @@ class HealthConnectManager(
          * `total` is the full metabolic cost; subtract resting (BMR ≈ 1 kcal/kg/hr)
          * for the duration to match Fitbit / Pixel Watch "active calories".
          */
-        fun activeCaloriesKcal(
-            totalWorkKj: Double,
-            weightKg: Double,
-            durationSeconds: Int
-        ): Double {
+        fun activeCaloriesKcal(totalWorkKj: Double, weightKg: Double, durationSeconds: Int): Double {
             val total = totalWorkKj.coerceAtLeast(0.0)
             val resting = (weightKg.coerceAtLeast(0.0) * durationSeconds.coerceAtLeast(0)) / 3600.0
             return (total - resting).coerceAtLeast(0.0)
@@ -220,19 +213,19 @@ class HealthConnectManager(
                     val (hrStartMs, hrEndMs) = window
                     val hrStart = Instant.ofEpochMilli(hrStartMs)
                     val hrEnd = Instant.ofEpochMilli(hrEndMs)
-                records += HeartRateRecord(
-                    startTime = hrStart,
-                    startZoneOffset = zoneOffset,
-                    endTime = hrEnd,
-                    endZoneOffset = zoneOffset,
-                    samples = plan.hrPoints.map { point ->
-                        HeartRateRecord.Sample(
-                            time = Instant.ofEpochMilli(point.timeEpochMs),
-                            beatsPerMinute = point.bpm.toLong()
-                        )
-                    },
-                    metadata = metadata
-                )
+                    records += HeartRateRecord(
+                        startTime = hrStart,
+                        startZoneOffset = zoneOffset,
+                        endTime = hrEnd,
+                        endZoneOffset = zoneOffset,
+                        samples = plan.hrPoints.map { point ->
+                            HeartRateRecord.Sample(
+                                time = Instant.ofEpochMilli(point.timeEpochMs),
+                                beatsPerMinute = point.bpm.toLong()
+                            )
+                        },
+                        metadata = metadata
+                    )
                 }
             }
 
@@ -282,13 +275,11 @@ class HealthConnectManager(
     private var lastSummary: WorkoutSummary? = null
     private var lastWeightKg: Float = 75.0f
 
-    private fun clientOrNull(): HealthConnectClient? {
-        return try {
-            HealthConnectClient.getOrCreate(context)
-        } catch (e: Exception) {
-            Log.w(TAG, "Health Connect provider unavailable: ${e.message}")
-            null
-        }
+    private fun clientOrNull(): HealthConnectClient? = try {
+        HealthConnectClient.getOrCreate(context)
+    } catch (e: Exception) {
+        Log.w(TAG, "Health Connect provider unavailable: ${e.message}")
+        null
     }
 
     /** Refreshes availability + permission snapshot (for Settings display). */

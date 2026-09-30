@@ -13,7 +13,6 @@ import com.valpr.bikecompanion.wear.messaging.WearMessageManager
  * while an active workout is being tracked by [service.WearWorkoutTrackingService].
  */
 class WearBikeApplication : Application() {
-
     lateinit var hapticManager: WatchHapticManager
         private set
 
@@ -27,10 +26,11 @@ class WearBikeApplication : Application() {
         super.onCreate()
         hapticManager = WatchHapticManager(applicationContext)
         messageManager = WearMessageManager(applicationContext, hapticManager)
-        healthServicesManager = HealthServicesManager(
-            context = applicationContext,
-            onBatchReady = { batch -> messageManager.sendHeartRateBatch(batch) }
-        )
+        healthServicesManager =
+            HealthServicesManager(
+                context = applicationContext,
+                onBatchReady = { batch -> messageManager.sendHeartRateBatch(batch) }
+            )
     }
 
     override fun onTerminate() {

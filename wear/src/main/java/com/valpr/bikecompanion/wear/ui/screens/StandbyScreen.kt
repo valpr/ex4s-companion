@@ -29,11 +29,7 @@ import androidx.wear.compose.material.Text
  * Prevents accidental workout starts from the watch.
  */
 @Composable
-fun StandbyScreen(
-    isPhoneConnected: Boolean,
-    currentHeartRate: Int,
-    modifier: Modifier = Modifier
-) {
+fun StandbyScreen(isPhoneConnected: Boolean, currentHeartRate: Int, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxSize()

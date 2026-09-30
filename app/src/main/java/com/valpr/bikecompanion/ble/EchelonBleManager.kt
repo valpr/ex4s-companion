@@ -35,10 +35,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-class EchelonBleManager(
-    private val context: Context,
-    private val bluetoothAdapter: BluetoothAdapter?
-) {
+class EchelonBleManager(private val context: Context, private val bluetoothAdapter: BluetoothAdapter?) {
     companion object {
         private const val TAG = "EchelonBleManager"
         private const val POLL_INTERVAL_MS = 2000L
@@ -72,7 +69,9 @@ class EchelonBleManager(
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError.asStateFlow()
 
-    fun clearLastError() { _lastError.value = null }
+    fun clearLastError() {
+        _lastError.value = null
+    }
 
     private val _packetLog = MutableSharedFlow<PacketLogEntry>(extraBufferCapacity = 100)
     val packetLog: SharedFlow<PacketLogEntry> = _packetLog.asSharedFlow()
@@ -170,7 +169,10 @@ class EchelonBleManager(
         Log.d(TAG, "BLE Device seen: '$resolvedName' [$address] rssi=$rssi, isEchelon=$isEchelon")
 
         if (autoConnect && isEchelon && _connectionState.value is BleConnectionState.Scanning) {
-            Log.i(TAG, "QZ-style Auto-Connect: Found Echelon bike '$resolvedName' [$address]. Connecting immediately...")
+            Log.i(
+                TAG,
+                "QZ-style Auto-Connect: Found Echelon bike '$resolvedName' [$address]. Connecting immediately..."
+            )
             connect(device)
             return
         }
@@ -360,20 +362,13 @@ class EchelonBleManager(
             commandQueue.onCharacteristicWriteAcknowledged(status)
         }
 
-        override fun onDescriptorWrite(
-            gatt: BluetoothGatt,
-            descriptor: BluetoothGattDescriptor,
-            status: Int
-        ) {
+        override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
             commandQueue.onDescriptorWriteAcknowledged(status)
         }
 
         @Deprecated("Deprecated in Java API 33")
         @Suppress("DEPRECATION")
-        override fun onCharacteristicChanged(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic
-        ) {
+        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
             handleNotificationBytes(characteristic.value ?: return)
         }
 
@@ -457,7 +452,12 @@ class EchelonBleManager(
         val parsed = EchelonPacketParser.parse(data)
         when (parsed) {
             is ParsedPacket.CadenceFrame -> {
-                logPacket(PacketDirection.RX, "0xD1 Cadence", data, "Cadence: ${parsed.cadenceRpm} RPM, Dist: %.2f km".format(parsed.distanceKm))
+                logPacket(
+                    PacketDirection.RX,
+                    "0xD1 Cadence",
+                    data,
+                    "Cadence: ${parsed.cadenceRpm} RPM, Dist: %.2f km".format(parsed.distanceKm)
+                )
                 _telemetry.update { current ->
                     val watts = EchelonWattTable.calculateWattsInt(
                         resistance = current.resistanceLevel,
@@ -498,12 +498,7 @@ class EchelonBleManager(
         }
     }
 
-    private fun logPacket(
-        direction: PacketDirection,
-        opcode: String,
-        rawBytes: ByteArray,
-        description: String
-    ) {
+    private fun logPacket(direction: PacketDirection, opcode: String, rawBytes: ByteArray, description: String) {
         _packetLog.tryEmit(
             PacketLogEntry(
                 direction = direction,

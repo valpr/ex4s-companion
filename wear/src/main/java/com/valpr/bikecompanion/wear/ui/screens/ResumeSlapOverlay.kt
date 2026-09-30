@@ -26,11 +26,7 @@ import androidx.wear.compose.material.Text
  * "TAP TO RESUME" target allowing for a gross-motor hand slap to re-engage the workout.
  */
 @Composable
-fun ResumeSlapOverlay(
-    onTapToResume: () -> Unit,
-    currentCadence: Int = 0,
-    modifier: Modifier = Modifier
-) {
+fun ResumeSlapOverlay(onTapToResume: () -> Unit, currentCadence: Int = 0, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -65,7 +61,7 @@ fun ResumeSlapOverlay(
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = "CADENCE ${currentCadence} RPM — SPIN UP PAST 75",
+                text = "CADENCE $currentCadence RPM — SPIN UP PAST 75",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Black,
                 color = Color.Black.copy(alpha = 0.8f),

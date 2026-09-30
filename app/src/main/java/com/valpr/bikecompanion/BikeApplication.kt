@@ -6,10 +6,8 @@ import android.content.Context
 import com.valpr.bikecompanion.ble.EchelonBleManager
 import com.valpr.bikecompanion.data.UserProfileRepository
 import com.valpr.bikecompanion.data.userProfileDataStore
-
-
-import com.valpr.bikecompanion.wearable.PhoneWearableManager
 import com.valpr.bikecompanion.health.HealthConnectManager
+import com.valpr.bikecompanion.wearable.PhoneWearableManager
 import com.valpr.bikecompanion.workout.WorkoutRepository
 import com.valpr.bikecompanion.workout.WorkoutSessionManager
 

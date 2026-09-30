@@ -10,11 +10,7 @@ import kotlin.math.abs
 
 class HealthConnectManagerTest {
 
-    private fun sample(
-        elapsed: Int,
-        watts: Int = 200,
-        hr: Int = 140
-    ) = WorkoutMetricSample(
+    private fun sample(elapsed: Int, watts: Int = 200, hr: Int = 140) = WorkoutMetricSample(
         elapsedSeconds = elapsed,
         watts = watts,
         targetWatts = 200,

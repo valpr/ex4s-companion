@@ -17,54 +17,46 @@ object EchelonProtocol {
     /**
      * Handshake Step 1: 0xF0, 0xA1, 0x00, 0x91 (sent 4 times in QZ reference)
      */
-    fun createHandshakeStep1(): ByteArray {
-        return byteArrayOf(
-            0xF0.toByte(),
-            0xA1.toByte(),
-            0x00.toByte(),
-            0x91.toByte()
-        )
-    }
+    fun createHandshakeStep1(): ByteArray = byteArrayOf(
+        0xF0.toByte(),
+        0xA1.toByte(),
+        0x00.toByte(),
+        0x91.toByte()
+    )
 
     /**
      * Handshake Step 2: 0xF0, 0xA3, 0x00, 0x93 (sent once)
      */
-    fun createHandshakeStep2(): ByteArray {
-        return byteArrayOf(
-            0xF0.toByte(),
-            0xA3.toByte(),
-            0x00.toByte(),
-            0x93.toByte()
-        )
-    }
+    fun createHandshakeStep2(): ByteArray = byteArrayOf(
+        0xF0.toByte(),
+        0xA3.toByte(),
+        0x00.toByte(),
+        0x93.toByte()
+    )
 
     /**
      * Handshake Step 3: 0xF0, 0xB0, 0x01, 0x01, 0xA2 (sensor activation, sent once)
      */
-    fun createHandshakeStep3(): ByteArray {
-        return byteArrayOf(
-            0xF0.toByte(),
-            0xB0.toByte(),
-            0x01.toByte(),
-            0x01.toByte(),
-            0xA2.toByte()
-        )
-    }
+    fun createHandshakeStep3(): ByteArray = byteArrayOf(
+        0xF0.toByte(),
+        0xB0.toByte(),
+        0x01.toByte(),
+        0x01.toByte(),
+        0xA2.toByte()
+    )
 
     /**
      * Returns the full handshake sequence of commands in strict order.
      */
-    fun getFullHandshakeSequence(): List<Pair<ByteArray, String>> {
-        return listOf(
-            createHandshakeStep1() to "Handshake Step 1 (1/4)",
-            createHandshakeStep1() to "Handshake Step 1 (2/4)",
-            createHandshakeStep1() to "Handshake Step 1 (3/4)",
-            createHandshakeStep1() to "Handshake Step 1 (4/4)",
-            createHandshakeStep2() to "Handshake Step 2 (Mode)",
-            createHandshakeStep1() to "Handshake Step 1 (Interlude)",
-            createHandshakeStep3() to "Handshake Step 3 (Sensor Activate)"
-        )
-    }
+    fun getFullHandshakeSequence(): List<Pair<ByteArray, String>> = listOf(
+        createHandshakeStep1() to "Handshake Step 1 (1/4)",
+        createHandshakeStep1() to "Handshake Step 1 (2/4)",
+        createHandshakeStep1() to "Handshake Step 1 (3/4)",
+        createHandshakeStep1() to "Handshake Step 1 (4/4)",
+        createHandshakeStep2() to "Handshake Step 2 (Mode)",
+        createHandshakeStep1() to "Handshake Step 1 (Interlude)",
+        createHandshakeStep3() to "Handshake Step 3 (Sensor Activate)"
+    )
 
     /**
      * Keep-alive poll command sent every 2 seconds:

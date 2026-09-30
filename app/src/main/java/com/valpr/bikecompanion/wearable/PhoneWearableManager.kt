@@ -2,11 +2,6 @@ package com.valpr.bikecompanion.wearable
 
 import android.content.Context
 import android.util.Log
-import com.valpr.bikecompanion.engine.ErgState
-import com.valpr.bikecompanion.shared.WearableProtocol
-import com.valpr.bikecompanion.shared.WorkoutStateMessage
-import com.valpr.bikecompanion.workout.SessionStatus
-import com.valpr.bikecompanion.workout.WorkoutSessionManager
 import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.MessageClient
@@ -14,6 +9,11 @@ import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Node
 import com.google.android.gms.wearable.NodeClient
 import com.google.android.gms.wearable.Wearable
+import com.valpr.bikecompanion.engine.ErgState
+import com.valpr.bikecompanion.shared.WearableProtocol
+import com.valpr.bikecompanion.shared.WorkoutStateMessage
+import com.valpr.bikecompanion.workout.SessionStatus
+import com.valpr.bikecompanion.workout.WorkoutSessionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -49,7 +49,8 @@ class PhoneWearableManager(
     nodeClientOverride: NodeClient? = null,
     capabilityClientOverride: CapabilityClient? = null,
     private val clock: () -> Long = System::currentTimeMillis
-) : MessageClient.OnMessageReceivedListener, CapabilityClient.OnCapabilityChangedListener {
+) : MessageClient.OnMessageReceivedListener,
+    CapabilityClient.OnCapabilityChangedListener {
 
     companion object {
         private const val TAG = "PhoneWearableManager"
@@ -200,7 +201,9 @@ class PhoneWearableManager(
                     isBailoutActive = isBailout,
                     isCadenceFloorActive = isCadenceFloor,
                     isHrCapped = isHrCapped,
-                    workoutName = session.workout?.name ?: if (session.isFreeRide && session.status != SessionStatus.IDLE) "Free Ride" else "",
+                    workoutName =
+                    session.workout?.name
+                        ?: if (session.isFreeRide && session.status != SessionStatus.IDLE) "Free Ride" else "",
                     athleteMaxHr = session.athleteMaxHr
                 )
 

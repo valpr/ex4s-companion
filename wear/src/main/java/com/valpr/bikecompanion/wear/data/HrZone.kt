@@ -11,14 +11,12 @@ enum class HrZone(val zoneNumber: Int, val label: String, val color: Color) {
     ZONE_5(5, "Max Effort", Color(0xFFFF1744));
 
     companion object {
-        fun fromBpm(bpm: Int, maxHr: Int = SharedHrZone.DEFAULT_MAX_HR): HrZone {
-            return when (SharedHrZone.zoneNumber(bpm, maxHr)) {
-                1 -> ZONE_1
-                2 -> ZONE_2
-                3 -> ZONE_3
-                4 -> ZONE_4
-                else -> ZONE_5
-            }
+        fun fromBpm(bpm: Int, maxHr: Int = SharedHrZone.DEFAULT_MAX_HR): HrZone = when (SharedHrZone.zoneNumber(bpm, maxHr)) {
+            1 -> ZONE_1
+            2 -> ZONE_2
+            3 -> ZONE_3
+            4 -> ZONE_4
+            else -> ZONE_5
         }
     }
 }

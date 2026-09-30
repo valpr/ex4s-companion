@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class HrZoneTest {
-
     @Test
     fun testZoneThresholds_matchWatchContract() {
         val maxHr = 200

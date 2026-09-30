@@ -43,7 +43,15 @@ class WearSyncDecisionTest {
         val base = keys()
         val now = 1_000L
         // status
-        assertTrue(WearSyncDecision.shouldSync(now, now, base.copy(statusCode = WorkoutStateMessage.STATUS_PAUSED), base, false))
+        assertTrue(
+            WearSyncDecision.shouldSync(
+                now,
+                now,
+                base.copy(statusCode = WorkoutStateMessage.STATUS_PAUSED),
+                base,
+                false
+            )
+        )
         // bailout
         assertTrue(WearSyncDecision.shouldSync(now, now, base.copy(isBailout = true), base, false))
         // cadence floor

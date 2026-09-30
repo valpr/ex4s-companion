@@ -13,10 +13,11 @@ import com.valpr.bikecompanion.shared.WorkoutStateMessage
  * never crash on the safety path).
  */
 object WearMessageRouter {
-
     sealed interface Action {
         data class UpdateState(val state: WorkoutStateMessage) : Action
+
         data class PlayHaptic(val alert: HapticAlertType) : Action
+
         data object Ignore : Action
     }
 

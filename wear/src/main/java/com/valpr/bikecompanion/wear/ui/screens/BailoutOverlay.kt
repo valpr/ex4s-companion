@@ -25,10 +25,7 @@ import androidx.wear.compose.material.Text
  * the screen flashes amber/red with the bold text "ERG SUSPENDED".
  */
 @Composable
-fun BailoutOverlay(
-    onResumeTapped: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+fun BailoutOverlay(onResumeTapped: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxSize()

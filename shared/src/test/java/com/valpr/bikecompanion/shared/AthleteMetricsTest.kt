@@ -5,7 +5,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AthleteMetricsTest {
-
     @Test
     fun testMaxHrFormulas() {
         // Age 30: Tanaka = 208 - 21 = 187

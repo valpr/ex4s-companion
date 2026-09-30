@@ -20,8 +20,8 @@ sealed interface BleCommand {
             if (javaClass != other?.javaClass) return false
             other as WriteCharacteristic
             return characteristic == other.characteristic &&
-                    data.contentEquals(other.data) &&
-                    description == other.description
+                data.contentEquals(other.data) &&
+                description == other.description
         }
 
         override fun hashCode(): Int {
@@ -43,8 +43,8 @@ sealed interface BleCommand {
             if (javaClass != other?.javaClass) return false
             other as WriteDescriptor
             return descriptor == other.descriptor &&
-                    data.contentEquals(other.data) &&
-                    description == other.description
+                data.contentEquals(other.data) &&
+                description == other.description
         }
 
         override fun hashCode(): Int {

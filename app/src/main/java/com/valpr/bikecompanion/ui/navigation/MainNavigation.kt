@@ -2,7 +2,6 @@ package com.valpr.bikecompanion.ui.navigation
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -18,12 +17,10 @@ import com.valpr.bikecompanion.BikeApplication
 import com.valpr.bikecompanion.data.UserProfile
 import com.valpr.bikecompanion.health.HealthConnectManager
 import com.valpr.bikecompanion.service.WorkoutTrackingService
-import com.valpr.bikecompanion.ui.dashboard.DashboardScreen
-import com.valpr.bikecompanion.ui.dashboard.DashboardViewModel
-import com.valpr.bikecompanion.ui.sandbox.SandboxScreen
-import com.valpr.bikecompanion.ui.sandbox.SandboxViewModel
 import com.valpr.bikecompanion.ui.athletestats.AthleteStatsScreen
 import com.valpr.bikecompanion.ui.athletestats.AthleteStatsViewModel
+import com.valpr.bikecompanion.ui.dashboard.DashboardScreen
+import com.valpr.bikecompanion.ui.dashboard.DashboardViewModel
 import com.valpr.bikecompanion.ui.summary.WorkoutSummaryScreen
 import com.valpr.bikecompanion.ui.workout.ActiveWorkoutScreen
 import com.valpr.bikecompanion.workout.SessionStatus
@@ -32,15 +29,11 @@ enum class AppScreen {
     DASHBOARD,
     ACTIVE_WORKOUT,
     WORKOUT_SUMMARY,
-    ATHLETE_STATS,
-    SANDBOX
+    ATHLETE_STATS
 }
 
 @Composable
-fun MainNavigation(
-    onRequestPermissions: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+fun MainNavigation(onRequestPermissions: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val app = context.applicationContext as BikeApplication
     val sessionManager = app.workoutSessionManager
@@ -67,7 +60,6 @@ fun MainNavigation(
                     currentScreen = AppScreen.ACTIVE_WORKOUT
                 },
                 onNavigateToAthleteStats = { currentScreen = AppScreen.ATHLETE_STATS },
-                onNavigateToSandbox = { currentScreen = AppScreen.SANDBOX },
                 modifier = modifier
             )
         }
@@ -150,16 +142,6 @@ fun MainNavigation(
                 onHealthConnectClick = {
                     healthPermissionLauncher.launch(HealthConnectManager.requiredPermissions())
                 },
-                modifier = modifier
-            )
-        }
-
-        AppScreen.SANDBOX -> {
-            BackHandler { currentScreen = AppScreen.DASHBOARD }
-            val sandboxVm: SandboxViewModel = viewModel()
-            SandboxScreen(
-                viewModel = sandboxVm,
-                onRequestPermissions = onRequestPermissions,
                 modifier = modifier
             )
         }

@@ -5,7 +5,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RotaryBailoutAccumulatorTest {
-
     @Test
     fun backwardFlick_firesAtThreshold() {
         val acc = RotaryBailoutAccumulator()

@@ -3,7 +3,6 @@ package com.valpr.bikecompanion.workout
 import android.content.Context
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.io.InputStream
 
 /**
@@ -23,9 +22,7 @@ data class CachedWorkoutHeader(
 /**
  * Repository managing workout files (.zwo) in internal app storage (`filesDir/workouts/`).
  */
-class WorkoutRepository(
-    private val workoutDirectory: File
-) {
+class WorkoutRepository(private val workoutDirectory: File) {
     constructor(context: Context) : this(File(context.filesDir, "workouts"))
 
     init {
@@ -90,7 +87,9 @@ class WorkoutRepository(
         if (parsedResult.isFailure || workout == null || workout.segments.isEmpty()) {
             return Result.failure(
                 parsedResult.exceptionOrNull()
-                    ?: IllegalArgumentException("Invalid workout: file must contain at least one segment in a <workout> block")
+                    ?: IllegalArgumentException(
+                        "Invalid workout: file must contain at least one segment in a <workout> block"
+                    )
             )
         }
 
@@ -126,15 +125,30 @@ class WorkoutRepository(
     }
 
     /**
-     * Pre-populates sample workouts if the library is empty.
+     * Pre-populates sample workouts if the library is empty, and backfills any
+     * missing samples for existing users (e.g. the Beginner Path added later).
+     * Idempotent: never overwrites user-modified files with the same name.
      */
     fun importSampleWorkoutsIfEmpty() {
-        val existingFiles = workoutDirectory.listFiles { file ->
-            file.isFile && file.name.endsWith(".zwo", ignoreCase = true)
-        }
-        if (existingFiles.isNullOrEmpty()) {
-            saveWorkout("sweet_spot_intervals.zwo", SAMPLE_SWEET_SPOT)
-            saveWorkout("ftp_ramp_test.zwo", SAMPLE_RAMP_TEST)
+        ensureSampleWorkouts()
+    }
+
+    /**
+     * Ensures every bundled sample exists on disk. Separated for testability.
+     */
+    fun ensureSampleWorkouts() {
+        ensureSample("sweet_spot_intervals.zwo", SAMPLE_SWEET_SPOT)
+        ensureSample("ftp_ramp_test.zwo", SAMPLE_RAMP_TEST)
+        ensureSample(BeginnerPlan.LEVELS[0].filename, SAMPLE_BEGINNER_01)
+        ensureSample(BeginnerPlan.LEVELS[1].filename, SAMPLE_BEGINNER_02)
+        ensureSample(BeginnerPlan.LEVELS[2].filename, SAMPLE_BEGINNER_03)
+        ensureSample(BeginnerPlan.LEVELS[3].filename, SAMPLE_BEGINNER_04)
+    }
+
+    private fun ensureSample(filename: String, xmlContent: String) {
+        val target = File(workoutDirectory, filename)
+        if (!target.exists()) {
+            saveWorkout(filename, xmlContent)
         }
     }
 
@@ -203,5 +217,114 @@ class WorkoutRepository(
                 </workout>
             </workout_file>
         """.trimIndent()
+
+        // region Beginner Path (Levels 1-4): short, easy, heavily coached.
+        val SAMPLE_BEGINNER_01 = """
+            <workout_file>
+                <author>Echelon Companion</author>
+                <name>First Pedals (15 min) - Beginner 1/4</name>
+                <description>Your very first ride. Easy spinning while ERG controls the bike, plus a 2-minute shifting practice. If you can talk in full sentences, you are at the right effort.</description>
+                <sportType>bike</sportType>
+                <tags>
+                    <tag name="Beginner"/>
+                    <tag name="Recovery"/>
+                </tags>
+                <workout>
+                    <Warmup Duration="300" PowerLow="0.40" PowerHigh="0.50" Cadence="75">
+                        <textevent timeoffset="10" message="Welcome! Just spin easy at 70-75 RPM. The bike sets resistance for you."/>
+                        <textevent timeoffset="150" message="Relax your shoulders, light grip, breathe through your nose."/>
+                    </Warmup>
+                    <SteadyState Duration="300" Power="0.50" Cadence="75">
+                        <textevent timeoffset="10" message="Nice and steady at 50% FTP. You should be able to chat easily."/>
+                    </SteadyState>
+                    <FreeRide Duration="120" Cadence="70">
+                        <textevent timeoffset="5" message="Your turn! Use the + / - buttons to feel resistance change, then settle easy."/>
+                    </FreeRide>
+                    <Cooldown Duration="180" PowerLow="0.50" PowerHigh="0.35" Cadence="70">
+                        <textevent timeoffset="5" message="Cool down. If this felt good, repeat it once more before Level 2."/>
+                    </Cooldown>
+                </workout>
+            </workout_file>
+        """.trimIndent()
+
+        val SAMPLE_BEGINNER_02 = """
+            <workout_file>
+                <author>Echelon Companion</author>
+                <name>Building Rhythm (20 min) - Beginner 2/4</name>
+                <description>Two steady blocks at 55-60% FTP with an easy breather between. Practice holding one rhythm instead of surging.</description>
+                <sportType>bike</sportType>
+                <tags>
+                    <tag name="Beginner"/>
+                    <tag name="Endurance"/>
+                </tags>
+                <workout>
+                    <Warmup Duration="300" PowerLow="0.40" PowerHigh="0.55" Cadence="75">
+                        <textevent timeoffset="10" message="5-minute warmup. Find a comfortable 75 RPM rhythm."/>
+                    </Warmup>
+                    <SteadyState Duration="360" Power="0.55" Cadence="78">
+                        <textevent timeoffset="10" message="First steady block at 55%. Breathing a little deeper is fine."/>
+                        <textevent timeoffset="240" message="Almost there. Keep your cadence smooth, not choppy."/>
+                    </SteadyState>
+                    <SteadyState Duration="180" Power="0.50" Cadence="75">
+                        <textevent timeoffset="5" message="Easy breather. Shake out your hands, sip water if needed."/>
+                    </SteadyState>
+                    <SteadyState Duration="240" Power="0.60" Cadence="78">
+                        <textevent timeoffset="5" message="Second block at 60%. Same rhythm, a touch more push."/>
+                    </SteadyState>
+                    <Cooldown Duration="120" PowerLow="0.50" PowerHigh="0.35" Cadence="70">
+                        <textevent timeoffset="5" message="Well done! Do this one twice comfortably, then try Level 3."/>
+                    </Cooldown>
+                </workout>
+            </workout_file>
+        """.trimIndent()
+
+        val SAMPLE_BEGINNER_03 = """
+            <workout_file>
+                <author>Echelon Companion</author>
+                <name>Steady Confidence (25 min) - Beginner 3/4</name>
+                <description>Two 6-minute pushes at 65% FTP with full recoveries. Your first taste of repeatable efforts. Back off anytime with The Clutch.</description>
+                <sportType>bike</sportType>
+                <tags>
+                    <tag name="Beginner"/>
+                    <tag name="Endurance"/>
+                </tags>
+                <workout>
+                    <Warmup Duration="300" PowerLow="0.40" PowerHigh="0.55" Cadence="75">
+                        <textevent timeoffset="10" message="Warm up well. Today has two gentle 6-minute pushes."/>
+                    </Warmup>
+                    <IntervalsT Repeat="2" OnDuration="360" OffDuration="180" OnPower="0.65" OffPower="0.50" Cadence="80" CadenceResting="75">
+                        <textevent timeoffset="10" message="Push at 65%: brisk but sustainable. Remember The Clutch if you need a break."/>
+                    </IntervalsT>
+                    <Cooldown Duration="120" PowerLow="0.50" PowerHigh="0.35" Cadence="70">
+                        <textevent timeoffset="5" message="Great control! Repeat until both pushes feel steady, then Level 4."/>
+                    </Cooldown>
+                </workout>
+            </workout_file>
+        """.trimIndent()
+
+        val SAMPLE_BEGINNER_04 = """
+            <workout_file>
+                <author>Echelon Companion</author>
+                <name>Ready for More (30 min) - Beginner 4/4</name>
+                <description>Graduation ride: three 5-minute efforts at 65-70% FTP. Finish this strong and you are ready for Sweet Spot Intervals.</description>
+                <sportType>bike</sportType>
+                <tags>
+                    <tag name="Beginner"/>
+                    <tag name="Tempo"/>
+                </tags>
+                <workout>
+                    <Warmup Duration="300" PowerLow="0.40" PowerHigh="0.55" Cadence="75">
+                        <textevent timeoffset="10" message="Last beginner level! Warm up, then 3 x 5 minutes."/>
+                    </Warmup>
+                    <IntervalsT Repeat="3" OnDuration="300" OffDuration="120" OnPower="0.68" OffPower="0.50" Cadence="80" CadenceResting="75">
+                        <textevent timeoffset="10" message="Push at 68%: strong breathing, but never gasping."/>
+                    </IntervalsT>
+                    <Cooldown Duration="240" PowerLow="0.50" PowerHigh="0.35" Cadence="70">
+                        <textevent timeoffset="5" message="You did it! Recover well. Next stop: Sweet Spot Intervals."/>
+                    </Cooldown>
+                </workout>
+            </workout_file>
+        """.trimIndent()
+        // endregion
     }
 }

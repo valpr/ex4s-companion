@@ -23,18 +23,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -594,7 +589,7 @@ fun AthleteStatsScreen(
                         Color(0xFFA5D6A7), // Z2 Green
                         Color(0xFFFFF59D), // Z3 Yellow
                         Color(0xFFFFCC80), // Z4 Orange
-                        Color(0xFFEF9A9A)  // Z5 Red
+                        Color(0xFFEF9A9A) // Z5 Red
                     )
 
                     Column(
@@ -735,7 +730,10 @@ fun AthleteStatsScreen(
                             var macError by remember { mutableStateOf<String?>(null) }
                             OutlinedTextField(
                                 value = macInput,
-                                onValueChange = { macInput = it; macError = null },
+                                onValueChange = {
+                                    macInput = it
+                                    macError = null
+                                },
                                 label = { Text("Manual MAC (fallback)") },
                                 placeholder = { Text("AA:BB:CC:DD:EE:FF") },
                                 singleLine = true,
@@ -783,14 +781,16 @@ fun AthleteStatsScreen(
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(8.dp))
+                            if (healthStatus.permissionsGranted != true) {
+                                Spacer(modifier = Modifier.height(8.dp))
 
-                            Button(
-                                onClick = onHealthConnectClick,
-                                enabled = healthStatus.providerAvailable != false,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Grant Health Connect Permissions")
+                                Button(
+                                    onClick = onHealthConnectClick,
+                                    enabled = healthStatus.providerAvailable != false,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Grant Health Connect Permissions")
+                                }
                             }
 
                             Spacer(modifier = Modifier.height(16.dp))
@@ -861,29 +861,6 @@ fun AthleteStatsScreen(
                             }
 
                             Spacer(modifier = Modifier.height(12.dp))
-
-                            // Firmware Notice
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2210)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(14.dp),
-                                    verticalAlignment = Alignment.Top
-                                ) {
-                                    Icon(Icons.Default.Warning, contentDescription = null, tint = AccentAmber)
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text("Firmware Lockdown Advisory", fontWeight = FontWeight.Bold, color = AccentAmber, fontSize = 13.sp)
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            "Do not update your EX-4S bike firmware using the official Echelon Fit app. Recent firmware releases enforce encrypted challenge-response handshakes that lock out third-party apps.",
-                                            fontSize = 11.sp,
-                                            color = Color(0xFFE0E0E0)
-                                        )
-                                    }
-                                }
-                            }
                         }
                     }
                 }

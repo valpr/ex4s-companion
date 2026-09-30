@@ -15,14 +15,9 @@ import java.io.InputStream
  * ViewModel keeps only the ContentResolver wiring and state updates, so a
  * failed import can never clobber preview/session state.
  */
-class WorkoutImportUseCase(
-    private val repository: WorkoutRepository
-) {
+class WorkoutImportUseCase(private val repository: WorkoutRepository) {
 
-    data class ImportedWorkout(
-        val filename: String,
-        val workout: Workout
-    )
+    data class ImportedWorkout(val filename: String, val workout: Workout)
 
     /**
      * @param displayName SAF `OpenableColumns.DISPLAY_NAME` (may be null for odd providers).
@@ -65,8 +60,11 @@ class WorkoutImportUseCase(
             val filename = displayName?.takeIf { it.isNotBlank() }
                 ?: fallbackSegment?.takeIf { it.isNotBlank() }
                 ?: "imported_workout.zwo"
-            return if (filename.endsWith(".zwo", ignoreCase = true)) Result.success(filename)
-            else Result.failure(IllegalArgumentException("Selected file is not a .zwo workout ($filename)"))
+            return if (filename.endsWith(".zwo", ignoreCase = true)) {
+                Result.success(filename)
+            } else {
+                Result.failure(IllegalArgumentException("Selected file is not a .zwo workout ($filename)"))
+            }
         }
 
         /**
@@ -74,18 +72,18 @@ class WorkoutImportUseCase(
          * provider has no cursor/row or throws (caller falls back to
          * `lastPathSegment`). Never throws.
          */
-        fun queryDisplayName(resolver: ContentResolver, uri: Uri): String? {
-            return try {
-                resolver.query(
-                    uri,
-                    arrayOf(OpenableColumns.DISPLAY_NAME),
-                    null, null, null
-                )?.use { cursor: Cursor ->
-                    if (cursor.moveToFirst()) cursor.getString(0) else null
-                }
-            } catch (_: Exception) {
+        fun queryDisplayName(resolver: ContentResolver, uri: Uri): String? = try {
+            resolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
                 null
+            )?.use { cursor: Cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
             }
+        } catch (_: Exception) {
+            null
         }
     }
 }

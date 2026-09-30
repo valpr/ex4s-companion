@@ -8,6 +8,5 @@ import com.valpr.bikecompanion.data.BleConnectionState
  */
 object WorkoutStartGate {
 
-    fun canStartWorkout(connectionState: BleConnectionState): Boolean =
-        connectionState is BleConnectionState.Connected
+    fun canStartWorkout(connectionState: BleConnectionState): Boolean = connectionState is BleConnectionState.Connected
 }

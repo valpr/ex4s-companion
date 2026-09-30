@@ -7,7 +7,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WearWorkoutTrackingServiceTest {
-
     private fun buildState(status: Int) = WorkoutStateMessage(
         sessionStatus = status,
         elapsedSeconds = 120,

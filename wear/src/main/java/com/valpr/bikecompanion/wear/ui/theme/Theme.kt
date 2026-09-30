@@ -27,9 +27,7 @@ private val WearColorPalette = Colors(
 )
 
 @Composable
-fun BikeCompanionWearTheme(
-    content: @Composable () -> Unit
-) {
+fun BikeCompanionWearTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colors = WearColorPalette,
         content = content

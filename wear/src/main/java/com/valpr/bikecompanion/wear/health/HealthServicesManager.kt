@@ -12,12 +12,11 @@ import androidx.health.services.client.data.Availability
 import androidx.health.services.client.data.DataType
 import androidx.health.services.client.data.ExerciseConfig
 import androidx.health.services.client.data.ExerciseLapSummary
-import androidx.health.services.client.data.ExerciseTrackedStatus
 import androidx.health.services.client.data.ExerciseType
 import androidx.health.services.client.data.ExerciseUpdate
-import com.valpr.bikecompanion.shared.HeartRateBatch
 import com.google.common.util.concurrent.FutureCallback
 import com.google.common.util.concurrent.Futures
+import com.valpr.bikecompanion.shared.HeartRateBatch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -67,45 +66,47 @@ class HealthServicesManager(
     private var isUsingFallbackSensor = false
     private val executor = Executors.newSingleThreadExecutor()
 
-    private val exerciseCallback = object : ExerciseUpdateCallback {
-        override fun onExerciseUpdateReceived(update: ExerciseUpdate) {
-            val hrDataPoints = update.latestMetrics.getData(DataType.HEART_RATE_BPM)
-            if (hrDataPoints.isNotEmpty()) {
-                for (dp in hrDataPoints) {
-                    val bpm = dp.value.toInt()
-                    recordSample(bpm)
+    private val exerciseCallback =
+        object : ExerciseUpdateCallback {
+            override fun onExerciseUpdateReceived(update: ExerciseUpdate) {
+                val hrDataPoints = update.latestMetrics.getData(DataType.HEART_RATE_BPM)
+                if (hrDataPoints.isNotEmpty()) {
+                    for (dp in hrDataPoints) {
+                        val bpm = dp.value.toInt()
+                        recordSample(bpm)
+                    }
                 }
+            }
+
+            override fun onLapSummaryReceived(lapSummary: ExerciseLapSummary) {}
+
+            override fun onRegistered() {
+                Log.d(TAG, "ExerciseClient callback registered successfully")
+            }
+
+            override fun onRegistrationFailed(throwable: Throwable) {
+                Log.w(TAG, "ExerciseClient callback registration failed: ${throwable.message}")
+                startFallbackSensorTracking()
+            }
+
+            override fun onAvailabilityChanged(dataType: DataType<*, *>, availability: Availability) {
+                Log.d(TAG, "Health Services availability changed: $dataType -> $availability")
             }
         }
 
-        override fun onLapSummaryReceived(lapSummary: ExerciseLapSummary) {}
-
-        override fun onRegistered() {
-            Log.d(TAG, "ExerciseClient callback registered successfully")
-        }
-
-        override fun onRegistrationFailed(throwable: Throwable) {
-            Log.w(TAG, "ExerciseClient callback registration failed: ${throwable.message}")
-            startFallbackSensorTracking()
-        }
-
-        override fun onAvailabilityChanged(dataType: DataType<*, *>, availability: Availability) {
-            Log.d(TAG, "Health Services availability changed: $dataType -> $availability")
-        }
-    }
-
-    private val fallbackSensorListener = object : SensorEventListener {
-        override fun onSensorChanged(event: SensorEvent?) {
-            if (event?.sensor?.type == Sensor.TYPE_HEART_RATE) {
-                val bpm = event.values.firstOrNull()?.toInt() ?: 0
-                if (bpm > 0) {
-                    recordSample(bpm)
+    private val fallbackSensorListener =
+        object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent?) {
+                if (event?.sensor?.type == Sensor.TYPE_HEART_RATE) {
+                    val bpm = event.values.firstOrNull()?.toInt() ?: 0
+                    if (bpm > 0) {
+                        recordSample(bpm)
+                    }
                 }
             }
-        }
 
-        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-    }
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+        }
 
     /**
      * Starts low-power ExerciseClient heart rate session.
@@ -117,26 +118,32 @@ class HealthServicesManager(
         startBatchDispatchLoop()
 
         try {
-            val config = ExerciseConfig.builder(ExerciseType.BIKING_STATIONARY)
-                .setDataTypes(setOf(DataType.HEART_RATE_BPM))
-                .setIsAutoPauseAndResumeEnabled(false)
-                .setIsGpsEnabled(false)
-                .build()
+            val config =
+                ExerciseConfig
+                    .builder(ExerciseType.BIKING_STATIONARY)
+                    .setDataTypes(setOf(DataType.HEART_RATE_BPM))
+                    .setIsAutoPauseAndResumeEnabled(false)
+                    .setIsGpsEnabled(false)
+                    .build()
 
             exerciseClient.setUpdateCallback(exerciseCallback)
 
             val startFuture = exerciseClient.startExerciseAsync(config)
-            Futures.addCallback(startFuture, object : FutureCallback<Void> {
-                override fun onSuccess(result: Void?) {
-                    Log.i(TAG, "Health Services ExerciseClient started on co-processor")
-                    isUsingFallbackSensor = false
-                }
+            Futures.addCallback(
+                startFuture,
+                object : FutureCallback<Void> {
+                    override fun onSuccess(result: Void?) {
+                        Log.i(TAG, "Health Services ExerciseClient started on co-processor")
+                        isUsingFallbackSensor = false
+                    }
 
-                override fun onFailure(t: Throwable) {
-                    Log.w(TAG, "Health Services start failed, falling back to SensorManager: ${t.message}")
-                    startFallbackSensorTracking()
-                }
-            }, executor)
+                    override fun onFailure(t: Throwable) {
+                        Log.w(TAG, "Health Services start failed, falling back to SensorManager: ${t.message}")
+                        startFallbackSensorTracking()
+                    }
+                },
+                executor
+            )
         } catch (e: Exception) {
             Log.w(TAG, "Exception initializing ExerciseClient: ${e.message}", e)
             startFallbackSensorTracking()
@@ -169,7 +176,10 @@ class HealthServicesManager(
      */
     fun setAmbientMode(ambient: Boolean) {
         isAmbientMode = ambient
-        Log.d(TAG, "Ambient mode updated: $ambient (Interval: ${if (ambient) AMBIENT_BATCH_INTERVAL_MS else ACTIVE_BATCH_INTERVAL_MS}ms)")
+        Log.d(
+            TAG,
+            "Ambient mode updated: $ambient (Interval: ${if (ambient) AMBIENT_BATCH_INTERVAL_MS else ACTIVE_BATCH_INTERVAL_MS}ms)"
+        )
     }
 
     /**
@@ -185,23 +195,25 @@ class HealthServicesManager(
      */
     private fun startBatchDispatchLoop() {
         batchLoopJob?.cancel()
-        batchLoopJob = scope.launch {
-            while (isActive) {
-                val interval = HrBatchAccumulator.intervalFor(isAmbientMode)
-                delay(interval)
+        batchLoopJob =
+            scope.launch {
+                while (isActive) {
+                    val interval = HrBatchAccumulator.intervalFor(isAmbientMode)
+                    delay(interval)
 
-                val samplesToSend: List<Int> = batchAccumulator.drain()
+                    val samplesToSend: List<Int> = batchAccumulator.drain()
 
-                if (samplesToSend.isNotEmpty()) {
-                    val batch = HeartRateBatch(
-                        timestampMs = System.currentTimeMillis(),
-                        bpmSamples = samplesToSend,
-                        accuracy = 3
-                    )
-                    onBatchReady(batch)
+                    if (samplesToSend.isNotEmpty()) {
+                        val batch =
+                            HeartRateBatch(
+                                timestampMs = System.currentTimeMillis(),
+                                bpmSamples = samplesToSend,
+                                accuracy = 3
+                            )
+                        onBatchReady(batch)
+                    }
                 }
             }
-        }
     }
 
     /**
@@ -222,15 +234,19 @@ class HealthServicesManager(
         } else {
             try {
                 val endFuture = exerciseClient.endExerciseAsync()
-                Futures.addCallback(endFuture, object : FutureCallback<Void> {
-                    override fun onSuccess(result: Void?) {
-                        Log.d(TAG, "ExerciseClient session ended cleanly")
-                    }
+                Futures.addCallback(
+                    endFuture,
+                    object : FutureCallback<Void> {
+                        override fun onSuccess(result: Void?) {
+                            Log.d(TAG, "ExerciseClient session ended cleanly")
+                        }
 
-                    override fun onFailure(t: Throwable) {
-                        Log.w(TAG, "Error ending ExerciseClient session: ${t.message}")
-                    }
-                }, executor)
+                        override fun onFailure(t: Throwable) {
+                            Log.w(TAG, "Error ending ExerciseClient session: ${t.message}")
+                        }
+                    },
+                    executor
+                )
                 exerciseClient.clearUpdateCallbackAsync(exerciseCallback)
             } catch (e: Exception) {
                 Log.w(TAG, "Error ending ExerciseClient: ${e.message}")

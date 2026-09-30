@@ -314,12 +314,10 @@ object ZwoParser {
         }
     }
 
-    private fun XmlPullParser.nextTextSafe(): String {
-        return try {
-            nextText().trim()
-        } catch (_: Exception) {
-            ""
-        }
+    private fun XmlPullParser.nextTextSafe(): String = try {
+        nextText().trim()
+    } catch (_: Exception) {
+        ""
     }
 
     fun XmlPullParser.getAttributeValueCaseInsensitive(name: String): String? {
@@ -331,15 +329,9 @@ object ZwoParser {
         return null
     }
 
-    fun XmlPullParser.getAttributeFloat(name: String, default: Float = 0f): Float {
-        return getAttributeValueCaseInsensitive(name)?.toFloatOrNull() ?: default
-    }
+    fun XmlPullParser.getAttributeFloat(name: String, default: Float = 0f): Float = getAttributeValueCaseInsensitive(name)?.toFloatOrNull() ?: default
 
-    fun XmlPullParser.getAttributeInt(name: String, default: Int = 0): Int {
-        return getAttributeValueCaseInsensitive(name)?.toIntOrNull() ?: default
-    }
+    fun XmlPullParser.getAttributeInt(name: String, default: Int = 0): Int = getAttributeValueCaseInsensitive(name)?.toIntOrNull() ?: default
 
-    fun XmlPullParser.getAttributeIntOrNull(name: String): Int? {
-        return getAttributeValueCaseInsensitive(name)?.toIntOrNull()
-    }
+    fun XmlPullParser.getAttributeIntOrNull(name: String): Int? = getAttributeValueCaseInsensitive(name)?.toIntOrNull()
 }

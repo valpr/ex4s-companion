@@ -9,14 +9,12 @@ package com.valpr.bikecompanion.wear.health
  * interval drains the watch; an empty drain must never emit a batch.
  */
 class HrBatchAccumulator {
-
     companion object {
         const val ACTIVE_INTERVAL_MS = 2500L
         const val AMBIENT_INTERVAL_MS = 6000L
 
         /** Active: 2-3s; Ambient: 5-10s (AP sleep). */
-        fun intervalFor(isAmbient: Boolean): Long =
-            if (isAmbient) AMBIENT_INTERVAL_MS else ACTIVE_INTERVAL_MS
+        fun intervalFor(isAmbient: Boolean): Long = if (isAmbient) AMBIENT_INTERVAL_MS else ACTIVE_INTERVAL_MS
     }
 
     private val lock = Any()

@@ -1,10 +1,10 @@
 package com.valpr.bikecompanion.wearable
 
 import android.util.Log
-import com.valpr.bikecompanion.BikeApplication
 import com.google.android.gms.wearable.CapabilityInfo
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
+import com.valpr.bikecompanion.BikeApplication
 
 /**
  * Foreground / background WearableListenerService to receive Wearable Data Layer events

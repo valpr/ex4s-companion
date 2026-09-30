@@ -14,10 +14,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
-import org.junit.After
 import org.junit.Before
 import org.junit.Test
 
@@ -53,15 +53,13 @@ class WorkoutSessionManagerTest {
         managerScope.cancel()
     }
 
-    private fun createManager(profile: UserProfile = defaultProfile): WorkoutSessionManager {
-        return WorkoutSessionManager(
-            telemetryFlow = telemetryFlow,
-            onSetResistance = { dispatchedResistance.add(it) },
-            userProfileFlow = flowOf(profile),
-            ergController = ergController,
-            scope = managerScope
-        )
-    }
+    private fun createManager(profile: UserProfile = defaultProfile): WorkoutSessionManager = WorkoutSessionManager(
+        telemetryFlow = telemetryFlow,
+        onSetResistance = { dispatchedResistance.add(it) },
+        userProfileFlow = flowOf(profile),
+        ergController = ergController,
+        scope = managerScope
+    )
 
     /** Flushes manager init collectors (profile -> FTP guard) without touching runTest's clock. */
     private fun settleManager() {
@@ -309,5 +307,4 @@ class WorkoutSessionManagerTest {
         assertEquals(SessionStatus.IDLE, offlineManager.sessionState.value.status)
         assertTrue(dispatchedResistance.isEmpty())
     }
-
 }

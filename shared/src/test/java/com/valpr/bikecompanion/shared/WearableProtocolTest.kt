@@ -8,14 +8,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WearableProtocolTest {
-
     @Test
     fun testHeartRateBatchSerializationAndDeserialization() {
-        val original = HeartRateBatch(
-            timestampMs = 1711600000000L,
-            bpmSamples = listOf(142, 143, 145, 146, 144),
-            accuracy = 3
-        )
+        val original =
+            HeartRateBatch(
+                timestampMs = 1711600000000L,
+                bpmSamples = listOf(142, 143, 145, 146, 144),
+                accuracy = 3
+            )
 
         val bytes = original.toByteArray()
         val decoded = HeartRateBatch.fromByteArray(bytes)
@@ -30,11 +30,12 @@ class WearableProtocolTest {
 
     @Test
     fun testHeartRateBatchEmptySamples() {
-        val original = HeartRateBatch(
-            timestampMs = 1711600000000L,
-            bpmSamples = emptyList(),
-            accuracy = 1
-        )
+        val original =
+            HeartRateBatch(
+                timestampMs = 1711600000000L,
+                bpmSamples = emptyList(),
+                accuracy = 1
+            )
 
         val bytes = original.toByteArray()
         val decoded = HeartRateBatch.fromByteArray(bytes)
@@ -53,18 +54,19 @@ class WearableProtocolTest {
 
     @Test
     fun testWorkoutStateMessageSerializationAndDeserialization() {
-        val original = WorkoutStateMessage(
-            sessionStatus = WorkoutStateMessage.STATUS_RUNNING,
-            elapsedSeconds = 125,
-            targetWatts = 220,
-            currentWatts = 218,
-            cadenceRpm = 88,
-            heartRateBpm = 152,
-            isBailoutActive = false,
-            isCadenceFloorActive = false,
-            isHrCapped = false,
-            workoutName = "Sweet Spot Intervals"
-        )
+        val original =
+            WorkoutStateMessage(
+                sessionStatus = WorkoutStateMessage.STATUS_RUNNING,
+                elapsedSeconds = 125,
+                targetWatts = 220,
+                currentWatts = 218,
+                cadenceRpm = 88,
+                heartRateBpm = 152,
+                isBailoutActive = false,
+                isCadenceFloorActive = false,
+                isHrCapped = false,
+                workoutName = "Sweet Spot Intervals"
+            )
 
         val bytes = original.toByteArray()
         val decoded = WorkoutStateMessage.fromByteArray(bytes)
@@ -87,18 +89,19 @@ class WearableProtocolTest {
 
     @Test
     fun testWorkoutStateFlagsSerialization() {
-        val original = WorkoutStateMessage(
-            sessionStatus = WorkoutStateMessage.STATUS_RUNNING,
-            elapsedSeconds = 300,
-            targetWatts = 250,
-            currentWatts = 120,
-            cadenceRpm = 52,
-            heartRateBpm = 178,
-            isBailoutActive = true,
-            isCadenceFloorActive = true,
-            isHrCapped = true,
-            workoutName = "Ramp Test"
-        )
+        val original =
+            WorkoutStateMessage(
+                sessionStatus = WorkoutStateMessage.STATUS_RUNNING,
+                elapsedSeconds = 300,
+                targetWatts = 250,
+                currentWatts = 120,
+                cadenceRpm = 52,
+                heartRateBpm = 178,
+                isBailoutActive = true,
+                isCadenceFloorActive = true,
+                isHrCapped = true,
+                workoutName = "Ramp Test"
+            )
 
         val bytes = original.toByteArray()
         val decoded = WorkoutStateMessage.fromByteArray(bytes)
@@ -117,19 +120,20 @@ class WearableProtocolTest {
 
     @Test
     fun testWorkoutStateMaxHrRoundTrip() {
-        val original = WorkoutStateMessage(
-            sessionStatus = WorkoutStateMessage.STATUS_RUNNING,
-            elapsedSeconds = 60,
-            targetWatts = 200,
-            currentWatts = 195,
-            cadenceRpm = 85,
-            heartRateBpm = 150,
-            isBailoutActive = false,
-            isCadenceFloorActive = false,
-            isHrCapped = false,
-            workoutName = "Test",
-            athleteMaxHr = 182
-        )
+        val original =
+            WorkoutStateMessage(
+                sessionStatus = WorkoutStateMessage.STATUS_RUNNING,
+                elapsedSeconds = 60,
+                targetWatts = 200,
+                currentWatts = 195,
+                cadenceRpm = 85,
+                heartRateBpm = 150,
+                isBailoutActive = false,
+                isCadenceFloorActive = false,
+                isHrCapped = false,
+                workoutName = "Test",
+                athleteMaxHr = 182
+            )
         val decoded = WorkoutStateMessage.fromByteArray(original.toByteArray())
         assertNotNull(decoded)
         assertEquals(182, decoded!!.athleteMaxHr)

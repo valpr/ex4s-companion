@@ -19,11 +19,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.math.max
 import kotlin.math.roundToInt
 
 enum class SessionStatus {
@@ -76,6 +74,7 @@ data class WorkoutSessionState(
     val currentHeartRate: Int = 0,
     val isCriticalHrActive: Boolean = false,
     val athleteMaxHr: Int = 190,
+    val athletePreferredCadence: Int = 85,
     val summary: WorkoutSummary? = null
 ) {
     val isFreeRide: Boolean get() = workout == null
@@ -118,7 +117,9 @@ class WorkoutSessionManager(
         userProfileFlow = userProfileRepository.userProfileFlow,
         ergController = ergController,
         scope = scope,
-        isBikeConnected = { bleManager.connectionState.value is com.valpr.bikecompanion.data.BleConnectionState.Connected }
+        isBikeConnected = {
+            bleManager.connectionState.value is com.valpr.bikecompanion.data.BleConnectionState.Connected
+        }
     )
 
     private val _sessionState = MutableStateFlow(WorkoutSessionState())
@@ -133,6 +134,7 @@ class WorkoutSessionManager(
     private var athleteFtpConfigured: Boolean = false
     private var athleteMaxHr: Int = 190
     private var athleteCriticalHr: Int = 175
+    private var athletePreferredCadence: Int = 85
     private var sessionStartEpochMs: Long = 0L
 
     /** Whether a structured (FTP-based) workout may start. Free Ride (`null`) is always allowed. */
@@ -154,11 +156,17 @@ class WorkoutSessionManager(
                 athleteFtpConfigured = profile.isFtpConfigured
                 athleteMaxHr = profile.maxHeartRate
                 athleteCriticalHr = profile.criticalHeartRate
+                athletePreferredCadence = profile.preferredCadenceRpm
                 ergController.kp = profile.ergKp.toDouble()
                 ergController.ki = profile.ergKi.toDouble()
                 ergController.cadenceFloorRpm = profile.cadenceFloorRpm.toDouble()
                 ergController.recoveryThresholdRpm = profile.cadenceRecoveryRpm.toDouble()
-                _sessionState.update { it.copy(athleteMaxHr = profile.maxHeartRate) }
+                _sessionState.update {
+                    it.copy(
+                        athleteMaxHr = profile.maxHeartRate,
+                        athletePreferredCadence = profile.preferredCadenceRpm
+                    )
+                }
             }
         }
     }
@@ -177,7 +185,9 @@ class WorkoutSessionManager(
             } else {
                 clampedBpm >= athleteCriticalHr
             }
-        } else false
+        } else {
+            false
+        }
 
         ergController.isCriticalHrActive = isCritical
 
@@ -218,7 +228,9 @@ class WorkoutSessionManager(
         val preservedHr = _sessionState.value.currentHeartRate
         val reEvaluatedCritical = if (athleteCriticalHr > 0 && preservedHr > 0) {
             preservedHr >= athleteCriticalHr
-        } else false
+        } else {
+            false
+        }
         ergController.isCriticalHrActive = reEvaluatedCritical
 
         _sessionState.update {
@@ -232,6 +244,7 @@ class WorkoutSessionManager(
                 currentHeartRate = it.currentHeartRate,
                 isCriticalHrActive = reEvaluatedCritical,
                 athleteMaxHr = it.athleteMaxHr,
+                athletePreferredCadence = it.athletePreferredCadence,
                 summary = null
             )
         }
@@ -328,7 +341,8 @@ class WorkoutSessionManager(
             WorkoutSessionState(
                 latestTelemetry = it.latestTelemetry,
                 currentHeartRate = it.currentHeartRate,
-                athleteMaxHr = it.athleteMaxHr
+                athleteMaxHr = it.athleteMaxHr,
+                athletePreferredCadence = it.athletePreferredCadence
             )
         }
     }

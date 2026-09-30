@@ -31,6 +31,5 @@ object HrZone {
         else -> "Max Effort"
     }
 
-    fun labelForBpm(bpm: Int, maxHr: Int = DEFAULT_MAX_HR): String =
-        label(zoneNumber(bpm, maxHr))
+    fun labelForBpm(bpm: Int, maxHr: Int = DEFAULT_MAX_HR): String = label(zoneNumber(bpm, maxHr))
 }

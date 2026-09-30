@@ -2,14 +2,14 @@ package com.valpr.bikecompanion.wear.messaging
 
 import android.content.Intent
 import android.util.Log
+import com.google.android.gms.wearable.MessageEvent
+import com.google.android.gms.wearable.WearableListenerService
 import com.valpr.bikecompanion.shared.HapticAlertType
 import com.valpr.bikecompanion.shared.WearableProtocol
 import com.valpr.bikecompanion.shared.WorkoutStateMessage
 import com.valpr.bikecompanion.wear.MainActivity
 import com.valpr.bikecompanion.wear.WearBikeApplication
 import com.valpr.bikecompanion.wear.service.WearWorkoutTrackingService
-import com.google.android.gms.wearable.MessageEvent
-import com.google.android.gms.wearable.WearableListenerService
 
 /**
  * Background listener service on Wear OS to wake the companion app or update state
@@ -21,7 +21,6 @@ import com.google.android.gms.wearable.WearableListenerService
  * the app is already open.
  */
 class WearMessageListenerService : WearableListenerService() {
-
     enum class ServiceAction {
         START,
         STOP,
@@ -89,9 +88,10 @@ class WearMessageListenerService : WearableListenerService() {
         if (!shouldWake) return
 
         Log.d(TAG, "Waking watch UI for path: ${messageEvent.path}")
-        val intent = Intent(this, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        }
+        val intent =
+            Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
         try {
             startActivity(intent)
         } catch (e: Exception) {

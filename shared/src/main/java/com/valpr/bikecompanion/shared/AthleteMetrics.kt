@@ -69,7 +69,6 @@ enum class CyclingCategory(val label: String, val minWkg: Float) {
  * Framework-free so it runs instantly on plain JUnit in both :app and :wear.
  */
 object AthleteMetrics {
-
     // --- Age-Based Max Heart Rate Estimation Formulas ---
 
     /**
@@ -124,10 +123,28 @@ object AthleteMetrics {
             PowerZone(1, "Active Recovery", 0, (baseFtp * 0.55).roundToInt(), "< 55%"),
             PowerZone(2, "Endurance", (baseFtp * 0.55).roundToInt() + 1, (baseFtp * 0.75).roundToInt(), "55–75%"),
             PowerZone(3, "Tempo", (baseFtp * 0.75).roundToInt() + 1, (baseFtp * 0.90).roundToInt(), "76–90%"),
-            PowerZone(4, "Lactate Threshold", (baseFtp * 0.90).roundToInt() + 1, (baseFtp * 1.05).roundToInt(), "91–105%"),
+            PowerZone(
+                4,
+                "Lactate Threshold",
+                (baseFtp * 0.90).roundToInt() + 1,
+                (baseFtp * 1.05).roundToInt(),
+                "91–105%"
+            ),
             PowerZone(5, "VO₂ Max", (baseFtp * 1.05).roundToInt() + 1, (baseFtp * 1.20).roundToInt(), "106–120%"),
-            PowerZone(6, "Anaerobic Capacity", (baseFtp * 1.20).roundToInt() + 1, (baseFtp * 1.50).roundToInt(), "121–150%"),
-            PowerZone(7, "Neuromuscular Power", (baseFtp * 1.50).roundToInt() + 1, (baseFtp * 2.50).roundToInt(), "> 150%")
+            PowerZone(
+                6,
+                "Anaerobic Capacity",
+                (baseFtp * 1.20).roundToInt() + 1,
+                (baseFtp * 1.50).roundToInt(),
+                "121–150%"
+            ),
+            PowerZone(
+                7,
+                "Neuromuscular Power",
+                (baseFtp * 1.50).roundToInt() + 1,
+                (baseFtp * 2.50).roundToInt(),
+                "> 150%"
+            )
         )
     }
 
@@ -169,9 +186,11 @@ object AthleteMetrics {
     // --- Unit Conversions ---
 
     fun kgToLbs(kg: Float): Float = kg * 2.20462262f
+
     fun lbsToKg(lbs: Float): Float = lbs / 2.20462262f
 
     fun cmToInches(cm: Float): Float = cm / 2.54f
+
     fun inchesToCm(inches: Float): Float = inches * 2.54f
 
     /**
@@ -191,11 +210,12 @@ object AthleteMetrics {
      */
     fun estimateBmrKcal(weightKg: Float, heightCm: Float, age: Int, sex: BiologicalSex): Int {
         val base = (10.0f * weightKg) + (6.25f * heightCm) - (5.0f * age)
-        val bmr = when (sex) {
-            BiologicalSex.MALE -> base + 5f
-            BiologicalSex.FEMALE -> base - 161f
-            BiologicalSex.OTHER -> base - 78f
-        }
+        val bmr =
+            when (sex) {
+                BiologicalSex.MALE -> base + 5f
+                BiologicalSex.FEMALE -> base - 161f
+                BiologicalSex.OTHER -> base - 78f
+            }
         return bmr.roundToInt().coerceAtLeast(500)
     }
 }

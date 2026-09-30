@@ -1,0 +1,26 @@
+#!/bin/sh
+# Pre-push safety gate: Verify spotless and unit tests before push
+
+echo "🔍 Running Spotless and unit tests before push..."
+
+# Set JAVA_HOME if not present and default Android Studio JBR exists
+if [ -z "$JAVA_HOME" ] && [ -d "C:/Program Files/Android/Android Studio/jbr" ]; then
+    export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"
+fi
+
+if [ -f "./gradlew.bat" ] && [ -n "$COMSPEC" ]; then
+    ./gradlew.bat spotlessCheck testDebugUnitTest
+else
+    ./gradlew spotlessCheck testDebugUnitTest
+fi
+
+RESULT=$?
+if [ $RESULT -ne 0 ]; then
+    echo "❌ Pre-push gate failed! Push aborted."
+    echo "   Ensure code is formatted ('./gradlew.bat spotlessApply') and unit tests pass."
+    echo "   Use 'git push --no-verify' only in emergencies."
+    exit 1
+fi
+
+echo "✅ Pre-push verification passed."
+exit 0

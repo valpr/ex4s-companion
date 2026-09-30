@@ -26,7 +26,6 @@ import kotlinx.coroutines.launch
  * during an active workout.
  */
 class WearWorkoutTrackingService : LifecycleService() {
-
     companion object {
         private const val TAG = "WearWorkoutService"
 
@@ -45,9 +44,10 @@ class WearWorkoutTrackingService : LifecycleService() {
         }
 
         fun start(context: Context) {
-            val intent = Intent(context, WearWorkoutTrackingService::class.java).apply {
-                action = ACTION_START
-            }
+            val intent =
+                Intent(context, WearWorkoutTrackingService::class.java).apply {
+                    action = ACTION_START
+                }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {
@@ -56,9 +56,10 @@ class WearWorkoutTrackingService : LifecycleService() {
         }
 
         fun stop(context: Context) {
-            val intent = Intent(context, WearWorkoutTrackingService::class.java).apply {
-                action = ACTION_STOP
-            }
+            val intent =
+                Intent(context, WearWorkoutTrackingService::class.java).apply {
+                    action = ACTION_STOP
+                }
             context.startService(intent)
         }
     }
@@ -90,17 +91,19 @@ class WearWorkoutTrackingService : LifecycleService() {
     }
 
     private fun startForegroundWithOngoing() {
-        val initialNotification = WearNotificationHelper.buildNotification(
-            context = this,
-            title = getString(R.string.wear_notification_title),
-            content = WearNotificationHelper.formatContent(0, 0)
-        )
+        val initialNotification =
+            WearNotificationHelper.buildNotification(
+                context = this,
+                title = getString(R.string.wear_notification_title),
+                content = WearNotificationHelper.formatContent(0, 0)
+            )
 
-        val serviceTypes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
-        } else {
-            0
-        }
+        val serviceTypes =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
+            } else {
+                0
+            }
 
         try {
             ServiceCompat.startForeground(
@@ -140,49 +143,53 @@ class WearWorkoutTrackingService : LifecycleService() {
         val healthManager = app.healthServicesManager
         val notificationManager = getSystemService(NotificationManager::class.java)
 
-        observeJob = lifecycleScope.launch {
-            combine(
-                messageManager.workoutState,
-                healthManager.currentHeartRate
-            ) { state, liveHr ->
-                Pair(state, liveHr)
-            }.collectLatest { (state, liveHr) ->
-                if (state == null) {
-                    if (liveHr > 0) {
-                        val initialNotification = WearNotificationHelper.buildNotification(
-                            context = this@WearWorkoutTrackingService,
-                            title = getString(R.string.wear_notification_title),
-                            content = WearNotificationHelper.formatContent(0, liveHr)
-                        )
-                        notificationManager?.notify(WearNotificationHelper.NOTIFICATION_ID, initialNotification)
+        observeJob =
+            lifecycleScope.launch {
+                combine(
+                    messageManager.workoutState,
+                    healthManager.currentHeartRate
+                ) { state, liveHr ->
+                    Pair(state, liveHr)
+                }.collectLatest { (state, liveHr) ->
+                    if (state == null) {
+                        if (liveHr > 0) {
+                            val initialNotification =
+                                WearNotificationHelper.buildNotification(
+                                    context = this@WearWorkoutTrackingService,
+                                    title = getString(R.string.wear_notification_title),
+                                    content = WearNotificationHelper.formatContent(0, liveHr)
+                                )
+                            notificationManager?.notify(WearNotificationHelper.NOTIFICATION_ID, initialNotification)
+                        }
+                        return@collectLatest
                     }
-                    return@collectLatest
-                }
 
-                if (shouldStopTracking(state)) {
-                    Log.i(TAG, "Workout state became idle/completed, stopping service")
-                    stopTracking()
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                    return@collectLatest
-                }
+                    if (shouldStopTracking(state)) {
+                        Log.i(TAG, "Workout state became idle/completed, stopping service")
+                        stopTracking()
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelf()
+                        return@collectLatest
+                    }
 
-                val title = if (state.workoutName.isNotBlank()) {
-                    state.workoutName
-                } else {
-                    getString(R.string.wear_notification_title)
-                }
-                val hrToDisplay = if (liveHr > 0) liveHr else state.heartRateBpm
-                val content = WearNotificationHelper.formatContent(state.elapsedSeconds, hrToDisplay)
+                    val title =
+                        if (state.workoutName.isNotBlank()) {
+                            state.workoutName
+                        } else {
+                            getString(R.string.wear_notification_title)
+                        }
+                    val hrToDisplay = if (liveHr > 0) liveHr else state.heartRateBpm
+                    val content = WearNotificationHelper.formatContent(state.elapsedSeconds, hrToDisplay)
 
-                val updatedNotification = WearNotificationHelper.buildNotification(
-                    context = this@WearWorkoutTrackingService,
-                    title = title,
-                    content = content
-                )
-                notificationManager?.notify(WearNotificationHelper.NOTIFICATION_ID, updatedNotification)
+                    val updatedNotification =
+                        WearNotificationHelper.buildNotification(
+                            context = this@WearWorkoutTrackingService,
+                            title = title,
+                            content = content
+                        )
+                    notificationManager?.notify(WearNotificationHelper.NOTIFICATION_ID, updatedNotification)
+                }
             }
-        }
     }
 
     override fun onDestroy() {

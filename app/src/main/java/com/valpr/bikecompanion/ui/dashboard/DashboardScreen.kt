@@ -2,8 +2,10 @@ package com.valpr.bikecompanion.ui.dashboard
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,19 +17,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DeveloperMode
-import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.sp
 import com.valpr.bikecompanion.data.BleConnectionState
 import com.valpr.bikecompanion.ui.components.DeviceScanDialog
 import com.valpr.bikecompanion.ui.components.WorkoutCanvasProfile
+import com.valpr.bikecompanion.workout.BeginnerPlan
 import com.valpr.bikecompanion.workout.CachedWorkoutHeader
 import com.valpr.bikecompanion.workout.SessionStatus
 import com.valpr.bikecompanion.workout.Workout
@@ -78,7 +79,6 @@ fun DashboardScreen(
     viewModel: DashboardViewModel,
     onStartWorkout: () -> Unit,
     onNavigateToAthleteStats: () -> Unit,
-    onNavigateToSandbox: () -> Unit,
     modifier: Modifier = Modifier,
     onResumeWorkout: () -> Unit = onStartWorkout,
     onNavigateToSettings: () -> Unit = onNavigateToAthleteStats
@@ -204,7 +204,11 @@ fun DashboardScreen(
                 val seconds = workout.totalDurationSeconds % 60
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text("Duration: %02d:%02d".format(minutes, seconds), fontWeight = FontWeight.SemiBold)
-                    Text("TSS: %.1f".format(workout.estimatedTss), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        "TSS: %.1f".format(workout.estimatedTss),
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
 
                 if (workout.description.isNotBlank()) {
@@ -267,9 +271,6 @@ fun DashboardScreen(
             TopAppBar(
                 title = { Text("EX-4S Companion", fontWeight = FontWeight.Bold) },
                 actions = {
-                    IconButton(onClick = onNavigateToSandbox) {
-                        Icon(Icons.Default.DeveloperMode, contentDescription = "Diagnostics Sandbox")
-                    }
                     IconButton(onClick = onNavigateToAthleteStats) {
                         Icon(Icons.Default.Person, contentDescription = "Athlete Profile & Stats")
                     }
@@ -336,7 +337,15 @@ fun DashboardScreen(
                 )
             }
 
-            // 4. Workout Library Header
+            // 4. Beginner Path (graduated recommendations for brand-new riders)
+            item {
+                BeginnerPathCard(
+                    cachedWorkouts = cachedWorkouts,
+                    onLevelClick = { filename -> viewModel.selectWorkoutForPreview(filename) }
+                )
+            }
+
+            // 5. Workout Library Header
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -469,7 +478,13 @@ private fun BikeConnectionCard(
 @Composable
 private fun PixelWatchStatusCard(watchState: com.valpr.bikecompanion.wearable.WearableWatchState) {
     val isConnected = watchState.isConnected
-    val containerColor = if (isConnected) Color(0xFF00331C) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+    val containerColor = if (isConnected) {
+        Color(
+            0xFF00331C
+        )
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+    }
     val iconColor = if (isConnected) Color(0xFF00E676) else Color(0xFF29B6F6)
 
     Card(
@@ -512,8 +527,11 @@ private fun PixelWatchStatusCard(watchState: com.valpr.bikecompanion.wearable.We
 private fun QuickStartCard(enabled: Boolean, onStartFreeRide: () -> Unit) {
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = if (enabled) MaterialTheme.colorScheme.primaryContainer
-            else MaterialTheme.colorScheme.surfaceVariant
+            containerColor = if (enabled) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            }
         ),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier
@@ -531,8 +549,11 @@ private fun QuickStartCard(enabled: Boolean, onStartFreeRide: () -> Unit) {
                 Icon(
                     Icons.AutoMirrored.Filled.DirectionsBike,
                     contentDescription = null,
-                    tint = if (enabled) MaterialTheme.colorScheme.onPrimaryContainer
-                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    tint = if (enabled) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    },
                     modifier = Modifier.size(28.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
@@ -541,15 +562,24 @@ private fun QuickStartCard(enabled: Boolean, onStartFreeRide: () -> Unit) {
                         "Quick Start (Free Ride)",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = if (enabled) MaterialTheme.colorScheme.onPrimaryContainer
-                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        color = if (enabled) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        }
                     )
                     Text(
-                        if (enabled) "Open ride with electronic resistance control"
-                        else "Connect your bike to start a ride",
+                        if (enabled) {
+                            "Open ride with electronic resistance control"
+                        } else {
+                            "Connect your bike to start a ride"
+                        },
                         fontSize = 12.sp,
-                        color = if (enabled) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                        else Color.Gray
+                        color = if (enabled) {
+                            MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        } else {
+                            Color.Gray
+                        }
                     )
                 }
             }
@@ -557,19 +587,147 @@ private fun QuickStartCard(enabled: Boolean, onStartFreeRide: () -> Unit) {
             Icon(
                 Icons.Default.PlayArrow,
                 contentDescription = null,
-                tint = if (enabled) MaterialTheme.colorScheme.onPrimaryContainer
-                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                tint = if (enabled) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                }
             )
         }
     }
 }
 
 @Composable
-private fun WorkoutItemCard(
-    header: CachedWorkoutHeader,
-    onClick: () -> Unit,
-    onDelete: () -> Unit
-) {
+private fun BeginnerPathCard(cachedWorkouts: List<CachedWorkoutHeader>, onLevelClick: (String) -> Unit) {
+    val headersByFile = remember(cachedWorkouts) {
+        cachedWorkouts.associateBy { it.filename.lowercase() }
+    }
+    // Without persisted ride history yet, always highlight Level 1 as the
+    // entry point; the ordered list itself communicates the progression.
+    val recommended = remember { BeginnerPlan.recommendNext(emptySet()) }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF0B2E1F)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                "NEW TO BIKING? START HERE",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF00E676),
+                letterSpacing = 1.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Beginner Path",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            Text(
+                BeginnerPlan.PACING_GUIDANCE,
+                fontSize = 12.sp,
+                color = Color(0xFFB0BEC5)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            BeginnerPlan.LEVELS.forEach { level ->
+                val header = headersByFile[level.filename.lowercase()]
+                val isRecommended = level.filename.equals(recommended.filename, ignoreCase = true)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = header != null) { onLevelClick(level.filename) }
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .background(Color(0xFF00E676), CircleShape)
+                    ) {
+                        Text(
+                            "${level.level}",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 16.sp,
+                            color = Color.Black
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                level.title,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Color.White
+                            )
+                            if (isRecommended && header != null) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .background(Color(0xFF00E676), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        "START HERE",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Black
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            level.focus,
+                            fontSize = 12.sp,
+                            color = Color(0xFFB0BEC5)
+                        )
+                        if (header != null) {
+                            val minutes = header.durationSeconds / 60
+                            Text(
+                                "$minutes min • TSS %.0f".format(header.estimatedTss),
+                                fontSize = 11.sp,
+                                color = Color(0xFF00E676),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        } else {
+                            Text(
+                                "Loading…",
+                                fontSize = 11.sp,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = "Start ${level.title}",
+                        tint = if (header != null) Color(0xFF00E676) else Color.Gray
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Graduation: Sweet Spot Intervals (30 min) (${BeginnerPlan.PACING_TIMELINE}). Easy efforts first — fitness builds week to week.",
+                fontSize = 11.sp,
+                color = Color(0xFF78909C)
+            )
+        }
+    }
+}
+
+@Composable
+private fun WorkoutItemCard(header: CachedWorkoutHeader, onClick: () -> Unit, onDelete: () -> Unit) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         shape = RoundedCornerShape(10.dp),
@@ -594,8 +752,18 @@ private fun WorkoutItemCard(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.padding(top = 4.dp)
                 ) {
-                    Text(timeStr, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                    Text("TSS %.0f".format(header.estimatedTss), fontSize = 12.sp, color = Color(0xFFFFB300), fontWeight = FontWeight.SemiBold)
+                    Text(
+                        timeStr,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "TSS %.0f".format(header.estimatedTss),
+                        fontSize = 12.sp,
+                        color = Color(0xFFFFB300),
+                        fontWeight = FontWeight.SemiBold
+                    )
                     if (header.author.isNotBlank()) {
                         Text(header.author, fontSize = 12.sp, color = Color.Gray)
                     }
@@ -603,18 +771,19 @@ private fun WorkoutItemCard(
             }
 
             IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Gray, modifier = Modifier.size(18.dp))
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = Color.Gray,
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
     }
 }
 
 @Composable
-internal fun ActiveWorkoutCard(
-    sessionState: WorkoutSessionState,
-    onResume: () -> Unit,
-    onStop: () -> Unit
-) {
+internal fun ActiveWorkoutCard(sessionState: WorkoutSessionState, onResume: () -> Unit, onStop: () -> Unit) {
     val isPaused = sessionState.status == SessionStatus.PAUSED
     val telem = sessionState.latestTelemetry
     val workoutName = sessionState.workout?.name ?: "Free Ride"

@@ -46,7 +46,7 @@ object EchelonWattTable {
         doubleArrayOf(EPSILON, 9.8, 36.0, 82.5, 134.5, 195.3, 252.5, 313.7, 360.0, 420.3, 460.0), // 29
         doubleArrayOf(EPSILON, 10.5, 43.0, 95.0, 157.1, 228.4, 300.1, 374.1, 403.8, 487.8, 540.0), // 30
         doubleArrayOf(EPSILON, 12.5, 48.0, 99.3, 162.2, 232.9, 310.4, 400.3, 435.5, 530.5, 589.0), // 31
-        doubleArrayOf(EPSILON, 13.0, 53.0, 102.0, 170.3, 242.0, 320.0, 427.9, 475.2, 570.0, 625.0)  // 32
+        doubleArrayOf(EPSILON, 13.0, 53.0, 102.0, 170.3, 242.0, 320.0, 427.9, 475.2, 570.0, 625.0) // 32
     )
 
     /**
@@ -76,9 +76,7 @@ object EchelonWattTable {
     /**
      * Convenience method returning rounded integer watts.
      */
-    fun calculateWattsInt(resistance: Int, cadenceRpm: Double): Int {
-        return calculateWatts(resistance, cadenceRpm).roundToInt().coerceAtLeast(0)
-    }
+    fun calculateWattsInt(resistance: Int, cadenceRpm: Double): Int = calculateWatts(resistance, cadenceRpm).roundToInt().coerceAtLeast(0)
 
     /**
      * Finds the closest resistance level (1..32) to hit a target power at the given cadence.

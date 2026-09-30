@@ -5,7 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class WearNotificationHelperTest {
-
     @Test
     fun formatContent_zeroValues_returnsTrackingPlaceholder() {
         val result = WearNotificationHelper.formatContent(elapsedSeconds = 0, heartRateBpm = 0)

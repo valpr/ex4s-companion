@@ -12,7 +12,6 @@ import com.valpr.bikecompanion.shared.HapticAlertType
  * Manages tactile haptic alerts on the Wear OS watch.
  */
 class WatchHapticManager(private val context: Context) {
-
     companion object {
         private const val TAG = "WatchHapticManager"
     }
@@ -28,10 +27,11 @@ class WatchHapticManager(private val context: Context) {
     }
 
     fun playAlert(alertType: HapticAlertType) {
-        val vib = vibrator ?: run {
-            Log.w(TAG, "No vibrator service available on device")
-            return
-        }
+        val vib =
+            vibrator ?: run {
+                Log.w(TAG, "No vibrator service available on device")
+                return
+            }
 
         try {
             when (alertType) {

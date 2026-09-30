@@ -64,15 +64,13 @@ class WorkoutUiSemanticsTest {
         managerScope.cancel()
     }
 
-    private fun createManager(): WorkoutSessionManager {
-        return WorkoutSessionManager(
-            telemetryFlow = telemetryFlow,
-            onSetResistance = { dispatchedResistance.add(it) },
-            userProfileFlow = flowOf(profile),
-            ergController = ErgController(),
-            scope = managerScope
-        )
-    }
+    private fun createManager(): WorkoutSessionManager = WorkoutSessionManager(
+        telemetryFlow = telemetryFlow,
+        onSetResistance = { dispatchedResistance.add(it) },
+        userProfileFlow = flowOf(profile),
+        ergController = ErgController(),
+        scope = managerScope
+    )
 
     private fun structuredWorkout() = Workout(
         name = "Semantics",
@@ -137,6 +135,37 @@ class WorkoutUiSemanticsTest {
         composeRule.onNodeWithText("+1 Res").performScrollTo().performClick()
         composeRule.waitForIdle()
         org.junit.Assert.assertEquals(listOf(11), dispatchedResistance)
+    }
+
+    @Test
+    fun freeRide_showsIdealCadenceGuidance() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {})
+        }
+
+        composeRule.onNodeWithText("IDEAL 80–90").assertIsDisplayed()
+    }
+
+    @Test
+    fun structured_withTargetCadence_showsCadenceTarget() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        val workout = Workout(
+            name = "Cadence Target",
+            segments = listOf(WorkoutSegment.SteadyState(durationSeconds = 600, power = 0.85f, targetCadence = 80))
+        )
+        manager.startWorkout(workout)
+        managerTime(1100L)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {})
+        }
+
+        composeRule.onNodeWithText("TARGET 80").assertIsDisplayed()
     }
 
     @Test

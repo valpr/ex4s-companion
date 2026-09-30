@@ -5,7 +5,6 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.valpr.bikecompanion.BikeApplication
-import com.valpr.bikecompanion.data.BleConnectionState
 import com.valpr.bikecompanion.data.UserProfile
 import com.valpr.bikecompanion.workout.CachedWorkoutHeader
 import com.valpr.bikecompanion.workout.Workout
@@ -18,7 +17,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class DashboardViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -84,7 +82,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 val displayName = WorkoutImportUseCase.queryDisplayName(contentResolver, uri)
                 try {
                     contentResolver.takePersistableUriPermission(
-                        uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        uri,
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                     )
                 } catch (_: Exception) { /* transient providers may not support it */ }
                 val result = importUseCase.import(
@@ -125,7 +124,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     companion object {
         /** Pure SAF filename resolution (JVM-testable): DISPLAY_NAME wins, .zwo enforced. */
-        fun resolveImportFilename(displayName: String?, fallbackSegment: String?): Result<String> =
-            WorkoutImportUseCase.resolveImportFilename(displayName, fallbackSegment)
+        fun resolveImportFilename(displayName: String?, fallbackSegment: String?): Result<String> = WorkoutImportUseCase.resolveImportFilename(displayName, fallbackSegment)
     }
 }

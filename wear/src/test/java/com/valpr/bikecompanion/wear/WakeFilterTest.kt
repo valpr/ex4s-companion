@@ -8,7 +8,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WakeFilterTest {
-
     private fun state(
         status: Int = WorkoutStateMessage.STATUS_RUNNING,
         bailout: Boolean = false,
@@ -30,7 +29,8 @@ class WakeFilterTest {
     fun steadyRunningTelemetry_doesNotWake() {
         assertFalse(
             WearMessageListenerService.shouldWakeForMessage(
-                WearableProtocol.PATH_WORKOUT_STATE, state()
+                WearableProtocol.PATH_WORKOUT_STATE,
+                state()
             )
         )
     }
@@ -39,12 +39,14 @@ class WakeFilterTest {
     fun bailoutFloorPausedCompleted_wake() {
         assertTrue(
             WearMessageListenerService.shouldWakeForMessage(
-                WearableProtocol.PATH_WORKOUT_STATE, state(bailout = true)
+                WearableProtocol.PATH_WORKOUT_STATE,
+                state(bailout = true)
             )
         )
         assertTrue(
             WearMessageListenerService.shouldWakeForMessage(
-                WearableProtocol.PATH_WORKOUT_STATE, state(floor = true)
+                WearableProtocol.PATH_WORKOUT_STATE,
+                state(floor = true)
             )
         )
         assertTrue(
@@ -65,7 +67,8 @@ class WakeFilterTest {
     fun haptic_wakes_unknownDoesNot() {
         assertTrue(
             WearMessageListenerService.shouldWakeForMessage(
-                WearableProtocol.PATH_HAPTIC_TRIGGER, byteArrayOf(0x01)
+                WearableProtocol.PATH_HAPTIC_TRIGGER,
+                byteArrayOf(0x01)
             )
         )
         assertFalse(

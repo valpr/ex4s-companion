@@ -17,7 +17,6 @@ import com.valpr.bikecompanion.wear.R
  * watch-face indicator so users have a 1-tap shortcut back to [MainActivity].
  */
 object WearNotificationHelper {
-
     const val CHANNEL_ID = "wear_workout_tracking"
     const val NOTIFICATION_ID = 2001
 
@@ -25,13 +24,19 @@ object WearNotificationHelper {
      * Pure content formatter (JVM-testable without Android stubs).
      */
     fun formatContent(elapsedSeconds: Int, heartRateBpm: Int): String {
-        val timeStr = if (elapsedSeconds > 0) {
-            "%02d:%02d".format(elapsedSeconds / 60, elapsedSeconds % 60)
-        } else null
+        val timeStr =
+            if (elapsedSeconds > 0) {
+                "%02d:%02d".format(elapsedSeconds / 60, elapsedSeconds % 60)
+            } else {
+                null
+            }
 
-        val hrStr = if (heartRateBpm > 0) {
-            "$heartRateBpm BPM"
-        } else null
+        val hrStr =
+            if (heartRateBpm > 0) {
+                "$heartRateBpm BPM"
+            } else {
+                null
+            }
 
         return when {
             timeStr != null && hrStr != null -> "$timeStr • $hrStr"
@@ -46,14 +51,15 @@ object WearNotificationHelper {
      */
     fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                context.getString(R.string.wear_notification_channel_name),
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = context.getString(R.string.wear_notification_channel_desc)
-                setShowBadge(false)
-            }
+            val channel =
+                NotificationChannel(
+                    CHANNEL_ID,
+                    context.getString(R.string.wear_notification_channel_name),
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = context.getString(R.string.wear_notification_channel_desc)
+                    setShowBadge(false)
+                }
             val manager = context.getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
         }
@@ -62,34 +68,35 @@ object WearNotificationHelper {
     /**
      * Builds the notification and applies the OngoingActivity builder.
      */
-    fun buildNotification(
-        context: Context,
-        title: String,
-        content: String
-    ): Notification {
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            0,
-            Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+    fun buildNotification(context: Context, title: String, content: String): Notification {
+        val pendingIntent =
+            PendingIntent.getActivity(
+                context,
+                0,
+                Intent(context, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
 
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(content)
-            .setSmallIcon(R.drawable.ic_workout_ongoing)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setContentIntent(pendingIntent)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(NotificationCompat.CATEGORY_WORKOUT)
+        val builder =
+            NotificationCompat
+                .Builder(context, CHANNEL_ID)
+                .setContentTitle(title)
+                .setContentText(content)
+                .setSmallIcon(R.drawable.ic_workout_ongoing)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setContentIntent(pendingIntent)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setCategory(NotificationCompat.CATEGORY_WORKOUT)
 
-        val ongoingActivity = OngoingActivity.Builder(context, NOTIFICATION_ID, builder)
-            .setStaticIcon(R.drawable.ic_workout_ongoing)
-            .setTouchIntent(pendingIntent)
-            .build()
+        val ongoingActivity =
+            OngoingActivity
+                .Builder(context, NOTIFICATION_ID, builder)
+                .setStaticIcon(R.drawable.ic_workout_ongoing)
+                .setTouchIntent(pendingIntent)
+                .build()
 
         ongoingActivity.apply(context)
 

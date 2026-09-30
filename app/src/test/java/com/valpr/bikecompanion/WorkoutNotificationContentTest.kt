@@ -156,12 +156,28 @@ class WorkoutNotificationContentTest {
 
     @Test
     fun content_combinesCadenceResistanceTimeAndSuffix() {
-        val s = session(SessionStatus.RUNNING, "W", 200, elapsed = 65, cadence = 90, resistance = 14, ergState = ErgState.ACTIVE)
+        val s =
+            session(
+                SessionStatus.RUNNING,
+                "W",
+                200,
+                elapsed = 65,
+                cadence = 90,
+                resistance = 14,
+                ergState = ErgState.ACTIVE
+            )
         assertEquals(
             "Cadence: 90 RPM • L14 • Time: 01:05 • ERG Active",
             WorkoutNotificationContent.buildContent(s)
         )
-        val bailout = session(SessionStatus.PAUSED, telemElapsed = 30, cadence = 40, resistance = 8, ergState = ErgState.CADENCE_FLOOR_BAILOUT)
+        val bailout =
+            session(
+                SessionStatus.PAUSED,
+                telemElapsed = 30,
+                cadence = 40,
+                resistance = 8,
+                ergState = ErgState.CADENCE_FLOOR_BAILOUT
+            )
         assertEquals(
             "Cadence: 40 RPM • L8 • Time: 00:30 • BAILOUT (Spin >75)",
             WorkoutNotificationContent.buildContent(bailout)

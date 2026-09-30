@@ -26,18 +26,17 @@ object WearableProtocol {
  * Batched Heart Rate samples sent from Pixel Watch to Phone.
  * Batching at 2-3s (active) or 5-10s (ambient) avoids the 25-40%/hr battery drain of 1Hz ChannelClient.
  */
-data class HeartRateBatch(
-    val timestampMs: Long,
-    val bpmSamples: List<Int>,
-    val accuracy: Int = 3
-) {
+data class HeartRateBatch(val timestampMs: Long, val bpmSamples: List<Int>, val accuracy: Int = 3) {
     val latestBpm: Int
         get() = bpmSamples.lastOrNull() ?: 0
 
     val averageBpm: Int
-        get() = if (bpmSamples.isNotEmpty()) {
-            bpmSamples.average().toInt()
-        } else 0
+        get() =
+            if (bpmSamples.isNotEmpty()) {
+                bpmSamples.average().toInt()
+            } else {
+                0
+            }
 
     fun toByteArray(): ByteArray {
         val baos = ByteArrayOutputStream()

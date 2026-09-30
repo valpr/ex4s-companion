@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- Ignore false positives on Wear capabilities array required by WearableListenerService (AGENTS.md Section 5) -->
+    <issue id="UnusedResources">
+        <ignore path="**/wear.xml" />
+        <ignore regexp="android_wear_capabilities" />
+    </issue>
+
+    <!-- Disable slow network version checks in local builds/hooks -->
+    <issue id="GradleDependency" severity="ignore" />
+    <issue id="NewerVersionAvailable" severity="ignore" />
+
+    <!-- Optional adaptive icon monochrome tag warning -->
+    <issue id="MonochromeLauncherIcon" severity="ignore" />
+</lint>

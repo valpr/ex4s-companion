@@ -5,9 +5,7 @@ package com.valpr.bikecompanion.shared
  * Backward flick only: accumulate scroll pixels, fire at <= -threshold,
  * forward scroll decays/resets so normal list scrolling never bails out.
  */
-class RotaryBailoutAccumulator(
-    private val thresholdPx: Float = 40f
-) {
+class RotaryBailoutAccumulator(private val thresholdPx: Float = 40f) {
     private var accumulator: Float = 0f
 
     /** Returns true when a bailout should fire (and resets). */
@@ -23,7 +21,9 @@ class RotaryBailoutAccumulator(
         return false
     }
 
-    fun reset() { accumulator = 0f }
+    fun reset() {
+        accumulator = 0f
+    }
 
     fun current(): Float = accumulator
 }

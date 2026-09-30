@@ -5,7 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class HrZoneTest {
-
     @Test
     fun testHrZoneCalculations() {
         val maxHr = 200

@@ -10,7 +10,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WearMessageRouterTest {
-
     private fun stateBytes(
         status: Int = WorkoutStateMessage.STATUS_RUNNING,
         bailout: Boolean = false,
@@ -30,19 +29,22 @@ class WearMessageRouterTest {
 
     @Test
     fun stateRoute_updates() {
-        val action = WearMessageRouter.route(
-            WearableProtocol.PATH_WORKOUT_STATE, stateBytes(bailout = true)
-        )
+        val action =
+            WearMessageRouter.route(
+                WearableProtocol.PATH_WORKOUT_STATE,
+                stateBytes(bailout = true)
+            )
         assertTrue(action is WearMessageRouter.Action.UpdateState)
         assertTrue((action as WearMessageRouter.Action.UpdateState).state.isBailoutActive)
     }
 
     @Test
     fun hapticRoute_plays() {
-        val action = WearMessageRouter.route(
-            WearableProtocol.PATH_HAPTIC_TRIGGER,
-            HapticAlertType.BAILOUT_TRIGGERED.toByteArray()
-        )
+        val action =
+            WearMessageRouter.route(
+                WearableProtocol.PATH_HAPTIC_TRIGGER,
+                HapticAlertType.BAILOUT_TRIGGERED.toByteArray()
+            )
         assertEquals(
             WearMessageRouter.Action.PlayHaptic(HapticAlertType.BAILOUT_TRIGGERED),
             action
@@ -83,12 +85,13 @@ class WearMessageRouterTest {
 
     @Test
     fun resolvePhoneLink_firstWins_emptyDisconnects() {
-        val link = WearMessageRouter.resolvePhoneLink(
-            listOf(
-                WearMessageRouter.PhoneNode("id-1", "Phone"),
-                WearMessageRouter.PhoneNode("id-2", "Other")
+        val link =
+            WearMessageRouter.resolvePhoneLink(
+                listOf(
+                    WearMessageRouter.PhoneNode("id-1", "Phone"),
+                    WearMessageRouter.PhoneNode("id-2", "Other")
+                )
             )
-        )
         assertTrue(link.isConnected)
         assertEquals("id-1", link.nodeId)
 

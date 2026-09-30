@@ -12,7 +12,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -24,7 +23,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.rotary.onRotaryScrollEvent
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
 import androidx.wear.ambient.AmbientLifecycleObserver
 import com.valpr.bikecompanion.wear.haptics.WatchHapticManager
 import com.valpr.bikecompanion.wear.health.HealthServicesManager
@@ -100,11 +98,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun WearApp(
-    messageManager: WearMessageManager,
-    healthServicesManager: HealthServicesManager,
-    isAmbient: Boolean
-) {
+fun WearApp(messageManager: WearMessageManager, healthServicesManager: HealthServicesManager, isAmbient: Boolean) {
     val context = LocalContext.current
     val isPhoneConnected by messageManager.isPhoneConnected.collectAsState()
     val workoutState by messageManager.workoutState.collectAsState()

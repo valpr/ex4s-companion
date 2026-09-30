@@ -52,6 +52,7 @@ class AthleteStatsUiTest {
 
         composeRule.onNodeWithText("Bluetooth Setup").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Advanced Engine Tuning").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Firmware Lockdown Advisory").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Reset to Defaults").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Firmware Lockdown Advisory").assertDoesNotExist()
     }
 }

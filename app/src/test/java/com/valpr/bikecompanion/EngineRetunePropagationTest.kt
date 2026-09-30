@@ -58,15 +58,13 @@ class EngineRetunePropagationTest {
         managerScope.cancel()
     }
 
-    private fun createManager(): WorkoutSessionManager {
-        return WorkoutSessionManager(
-            telemetryFlow = telemetryFlow,
-            onSetResistance = { dispatchedResistance.add(it) },
-            userProfileFlow = profileFlow,
-            ergController = ergController,
-            scope = managerScope
-        )
-    }
+    private fun createManager(): WorkoutSessionManager = WorkoutSessionManager(
+        telemetryFlow = telemetryFlow,
+        onSetResistance = { dispatchedResistance.add(it) },
+        userProfileFlow = profileFlow,
+        ergController = ergController,
+        scope = managerScope
+    )
 
     private fun settleManager() {
         managerScope.testScheduler.advanceUntilIdle()

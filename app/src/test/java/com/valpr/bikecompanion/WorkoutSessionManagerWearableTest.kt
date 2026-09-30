@@ -1,5 +1,6 @@
 package com.valpr.bikecompanion
 
+import app.cash.turbine.test
 import com.valpr.bikecompanion.data.BikeTelemetry
 import com.valpr.bikecompanion.data.UserProfile
 import com.valpr.bikecompanion.engine.ErgController
@@ -15,11 +16,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
-import app.cash.turbine.test
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.After
 import org.junit.Before
 import org.junit.Test
 
@@ -223,7 +223,8 @@ class WorkoutSessionManagerWearableTest {
             )
         )
 
-        telemetryFlow.value = BikeTelemetry(cadenceRpm = 85, estimatedWatts = 200, resistanceLevel = 15, speedKmh = 30.0)
+        telemetryFlow.value =
+            BikeTelemetry(cadenceRpm = 85, estimatedWatts = 200, resistanceLevel = 15, speedKmh = 30.0)
         settleManager()
         manager.startWorkout(sampleWorkout)
         managerTime(3000L)
@@ -239,7 +240,8 @@ class WorkoutSessionManagerWearableTest {
 
     @Test
     fun testSummary_calculatesAvgAndMaxHeartRate() = runTest {
-        telemetryFlow.value = BikeTelemetry(cadenceRpm = 85, estimatedWatts = 200, resistanceLevel = 15, speedKmh = 30.0)
+        telemetryFlow.value =
+            BikeTelemetry(cadenceRpm = 85, estimatedWatts = 200, resistanceLevel = 15, speedKmh = 30.0)
         val manager = createSessionManager()
         settleManager()
 

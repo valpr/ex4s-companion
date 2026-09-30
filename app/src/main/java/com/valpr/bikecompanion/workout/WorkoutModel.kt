@@ -64,11 +64,7 @@ data class Workout(
      * @param elapsedWorkoutSeconds Seconds elapsed from workout start.
      * @param intensityScale Optional multiplier for user intensity bias or Dynamic HR Capping (e.g. 0.90 for 10% reduction).
      */
-    fun targetWattsAt(
-        ftp: Int,
-        elapsedWorkoutSeconds: Int,
-        intensityScale: Float = 1.0f
-    ): Int? {
+    fun targetWattsAt(ftp: Int, elapsedWorkoutSeconds: Int, intensityScale: Float = 1.0f): Int? {
         val position = getSegmentAtTime(elapsedWorkoutSeconds) ?: return null
         val baseWatts = position.segment.targetWatts(ftp, position.segmentElapsedSeconds) ?: return null
         return (baseWatts * intensityScale).roundToInt().coerceAtLeast(0)
@@ -77,18 +73,14 @@ data class Workout(
     /**
      * Target cadence in RPM at the given elapsed workout second, or null if unspecified.
      */
-    fun targetCadenceAt(elapsedWorkoutSeconds: Int): Int? {
-        return getSegmentAtTime(elapsedWorkoutSeconds)?.segment?.targetCadence
-    }
+    fun targetCadenceAt(elapsedWorkoutSeconds: Int): Int? = getSegmentAtTime(elapsedWorkoutSeconds)?.segment?.targetCadence
 
     /**
      * Finds any coaching text events active at the specified second.
      */
-    fun activeTextEventsAt(elapsedWorkoutSeconds: Int, displayDurationSeconds: Int = 10): List<WorkoutTextEvent> {
-        return textEvents.filter { event ->
-            elapsedWorkoutSeconds >= event.timeOffsetSeconds &&
-                    elapsedWorkoutSeconds < (event.timeOffsetSeconds + displayDurationSeconds)
-        }
+    fun activeTextEventsAt(elapsedWorkoutSeconds: Int, displayDurationSeconds: Int = 10): List<WorkoutTextEvent> = textEvents.filter { event ->
+        elapsedWorkoutSeconds >= event.timeOffsetSeconds &&
+            elapsedWorkoutSeconds < (event.timeOffsetSeconds + displayDurationSeconds)
     }
 }
 
@@ -107,10 +99,7 @@ data class SegmentPosition(
  * An on-screen coaching cue parsed from a <textevent> element.
  * [timeOffsetSeconds] is relative to overall workout start.
  */
-data class WorkoutTextEvent(
-    val timeOffsetSeconds: Int,
-    val message: String
-)
+data class WorkoutTextEvent(val timeOffsetSeconds: Int, val message: String)
 
 /**
  * A discrete segment of a structured cycling workout.
@@ -171,9 +160,7 @@ sealed interface WorkoutSegment {
     ) : WorkoutSegment {
         override val averageIntensityFactor: Float = power
 
-        override fun targetWatts(ftp: Int, elapsedSecondsInSegment: Int): Int {
-            return (power * ftp).roundToInt()
-        }
+        override fun targetWatts(ftp: Int, elapsedSecondsInSegment: Int): Int = (power * ftp).roundToInt()
     }
 
     /**
@@ -212,10 +199,7 @@ sealed interface WorkoutSegment {
     /**
      * Max effort sprint: ERG mode disabled.
      */
-    data class MaxEffort(
-        override val durationSeconds: Int,
-        override val targetCadence: Int? = null
-    ) : WorkoutSegment {
+    data class MaxEffort(override val durationSeconds: Int, override val targetCadence: Int? = null) : WorkoutSegment {
         override val isErgEnabled: Boolean get() = false
         override val averageIntensityFactor: Float = 1.50f // High intensity estimate for TSS calculation
 

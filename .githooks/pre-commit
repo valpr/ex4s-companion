@@ -1,0 +1,49 @@
+#!/bin/sh
+# Fast pre-commit hook (< 1.5s) for lw-bike-companion
+
+# 1. Reject unresolved merge conflict markers
+if git diff --cached | grep -E '^\+[[:space:]]*(<{7}|={7}|>{7})' > /dev/null 2>&1; then
+    echo "❌ Error: Unresolved merge conflict markers found in staged files."
+    exit 1
+fi
+
+# 2. Reject sensitive files / private keys
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+if [ -n "$STAGED_FILES" ]; then
+    for file in $STAGED_FILES; do
+        case "$file" in
+            *.keystore|*.jks|*keystore.properties|*.pem|*.key|*id_rsa*)
+                echo "❌ Error: Attempting to commit sensitive credential file: $file"
+                exit 1
+                ;;
+        esac
+    done
+fi
+
+# 3. AGENTS.md Architectural Invariant Checks
+if [ -n "$STAGED_FILES" ]; then
+    for file in $STAGED_FILES; do
+        # Check: No android.util.Log in :shared (violates plain-JVM unit testability)
+        if echo "$file" | grep -E "^shared/.*\.kt$" > /dev/null 2>&1; then
+            if git diff --cached "$file" | grep -E "^\+[[:space:]]*import[[:space:]]+android\.util\.Log" > /dev/null 2>&1; then
+                echo "❌ Error: android.util.Log is forbidden in :shared (violates plain-JVM unit testability in AGENTS.md)."
+                echo "   Use an injected logger interface or pure Kotlin logger instead."
+                echo "   Offending file: $file"
+                exit 1
+            fi
+        fi
+
+        # Check: No hardcoded Dispatchers.IO in BleCommandQueue (violates two-clock coroutine testability)
+        if echo "$file" | grep -E "BleCommandQueue\.kt$" > /dev/null 2>&1; then
+            if git diff --cached "$file" | grep -E "^\+.*Dispatchers\.IO" > /dev/null 2>&1; then
+                echo "❌ Error: Hardcoded Dispatchers.IO detected in BleCommandQueue."
+                echo "   Violates coroutine testability in AGENTS.md Section 8 (inject workDispatcher instead)."
+                echo "   Offending file: $file"
+                exit 1
+            fi
+        fi
+    done
+fi
+
+echo "✅ Pre-commit checks passed."
+exit 0

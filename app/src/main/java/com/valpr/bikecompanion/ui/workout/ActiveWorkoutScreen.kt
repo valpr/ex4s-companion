@@ -10,11 +10,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,16 +25,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -40,7 +38,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -59,6 +56,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.valpr.bikecompanion.engine.ErgState
+import com.valpr.bikecompanion.shared.CadenceEvaluator
+import com.valpr.bikecompanion.shared.CadenceState
 import com.valpr.bikecompanion.ui.components.WorkoutCanvasProfile
 import com.valpr.bikecompanion.workout.SessionStatus
 import com.valpr.bikecompanion.workout.WorkoutSessionManager
@@ -201,7 +200,8 @@ private fun LandscapeWorkoutContent(
                 FreeRideResistancePanel(
                     currentResistance = state.latestTelemetry.resistanceLevel,
                     onResistanceChange = { sessionManager.setManualResistance(it) },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    enableInnerScroll = true
                 )
             }
 
@@ -293,12 +293,29 @@ private fun TheBigThree(state: WorkoutSessionState) {
         )
 
         // 2. Live Cadence
+        val cadenceFeedback = CadenceEvaluator.evaluate(
+            actualCadence = telem.cadenceRpm,
+            targetCadence = state.targetCadence,
+            preferredCadence = state.athletePreferredCadence
+        )
+        val cadenceColor = when (cadenceFeedback.colorToken) {
+            "GREEN" -> Color(0xFF00E676)
+            "AMBER" -> Color(0xFFFFB300)
+            "CYAN" -> Color(0xFF29B6F6)
+            else -> Color(0xFF888888)
+        }
+        val cadenceTargetColor = when (cadenceFeedback.state) {
+            CadenceState.TOO_SLOW -> Color(0xFFFFB300)
+            CadenceState.ON_TARGET -> Color(0xFF00E676)
+            else -> Color.White.copy(alpha = 0.7f)
+        }
         BigMetricTile(
             label = "CADENCE",
             value = "${telem.cadenceRpm}",
             unit = "RPM",
-            target = state.targetCadence?.let { "TARGET ${it}" },
-            accentColor = Color(0xFF29B6F6),
+            target = cadenceFeedback.displayLabel,
+            accentColor = cadenceColor,
+            targetColor = cadenceTargetColor,
             modifier = Modifier.weight(1f)
         )
 
@@ -306,7 +323,8 @@ private fun TheBigThree(state: WorkoutSessionState) {
         if (state.currentHeartRate > 0) {
             // Shared zone thresholds (same as watch) based on athlete max HR.
             val zone = com.valpr.bikecompanion.shared.HrZone.zoneNumber(
-                state.currentHeartRate, state.athleteMaxHr
+                state.currentHeartRate,
+                state.athleteMaxHr
             )
             val hrColor = when {
                 state.isCriticalHrActive -> Color(0xFFFF1744) // Critical Alert Red
@@ -344,7 +362,8 @@ private fun BigMetricTile(
     unit: String,
     target: String?,
     accentColor: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    targetColor: Color = Color.White.copy(alpha = 0.7f)
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1E232A)),
@@ -374,7 +393,7 @@ private fun BigMetricTile(
                     target,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.7f)
+                    color = targetColor
                 )
             }
         }
@@ -388,9 +407,9 @@ private fun TargetVsActualBar(state: WorkoutSessionState) {
     val diff = actual - target
 
     val barColor = when {
-        abs(diff) <= 8 -> Color(0xFF00E676)  // Spot on (Green)
-        diff > 8 -> Color(0xFFFF7043)        // Too high (Orange)
-        else -> Color(0xFFFFB300)            // Too low (Yellow)
+        abs(diff) <= 8 -> Color(0xFF00E676) // Spot on (Green)
+        diff > 8 -> Color(0xFFFF7043) // Too high (Orange)
+        else -> Color(0xFFFFB300) // Too low (Yellow)
     }
 
     val progressFraction = (actual.toFloat() / (target * 1.5f)).coerceIn(0f, 1f)
@@ -412,7 +431,7 @@ private fun TargetVsActualBar(state: WorkoutSessionState) {
                 .height(6.dp)
                 .clip(RoundedCornerShape(3.dp)),
             color = barColor,
-            trackColor = Color(0xFF262C36),
+            trackColor = Color(0xFF262C36)
         )
     }
 }
@@ -467,16 +486,17 @@ private fun WorkoutControlsBar(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (state.workout != null) {
             // Structured workout: Intensity scaling chips
             OutlinedButton(
                 onClick = { sessionManager.adjustIntensity(-0.05f) },
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
             ) {
-                Text("-5%", fontSize = 12.sp)
+                Text("-5%", fontSize = 12.sp, maxLines = 1)
             }
 
             val scalePercent = (state.intensityScale * 100).toInt()
@@ -484,36 +504,41 @@ private fun WorkoutControlsBar(
                 "$scalePercent%",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = Color.White,
+                maxLines = 1
             )
 
             OutlinedButton(
                 onClick = { sessionManager.adjustIntensity(0.05f) },
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
             ) {
-                Text("+5%", fontSize = 12.sp)
+                Text("+5%", fontSize = 12.sp, maxLines = 1)
             }
         } else {
             // Free Ride: Quick Resistance shift buttons
             OutlinedButton(
                 onClick = { sessionManager.adjustManualResistance(-1) },
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
             ) {
-                Text("-1 Res", fontSize = 12.sp)
+                Text("-1 Res", fontSize = 12.sp, maxLines = 1)
             }
 
             Text(
                 "L${state.latestTelemetry.resistanceLevel}",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Black,
-                color = Color(0xFFFFB300)
+                color = Color(0xFFFFB300),
+                maxLines = 1
             )
 
             OutlinedButton(
                 onClick = { sessionManager.adjustManualResistance(1) },
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
             ) {
-                Text("+1 Res", fontSize = 12.sp)
+                Text("+1 Res", fontSize = 12.sp, maxLines = 1)
             }
         }
 
@@ -523,26 +548,29 @@ private fun WorkoutControlsBar(
         if (state.status == SessionStatus.RUNNING) {
             Button(
                 onClick = { sessionManager.pauseWorkout() },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF455A64))
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF455A64)),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
             ) {
                 Icon(Icons.Default.Pause, contentDescription = "Pause")
             }
         } else if (state.status == SessionStatus.PAUSED) {
             Button(
                 onClick = { sessionManager.resumeWorkout() },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676))
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676)),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
             ) {
                 Icon(Icons.Default.PlayArrow, contentDescription = "Resume", tint = Color.Black)
             }
         }
 
-        // Finish / Stop
+        // Finish / Stop — never allow shrink/clip at the row end
         Button(
             onClick = {
                 sessionManager.stopWorkout()
                 onFinish()
             },
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
         ) {
             Icon(Icons.Default.Stop, contentDescription = "Stop")
         }
@@ -554,7 +582,8 @@ private fun WorkoutControlsBar(
 private fun FreeRideResistancePanel(
     currentResistance: Int,
     onResistanceChange: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enableInnerScroll: Boolean = false
 ) {
     val presets = listOf(1, 4, 8, 12, 16, 20, 24, 28, 32)
 
@@ -564,7 +593,13 @@ private fun FreeRideResistancePanel(
         modifier = modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = if (enableInnerScroll) {
+                Modifier
+                    .padding(12.dp)
+                    .verticalScroll(rememberScrollState())
+            } else {
+                Modifier.padding(12.dp)
+            },
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
@@ -651,9 +686,10 @@ private fun FreeRideResistancePanel(
                             contentColor = if (isSelected) Color.Black else Color.White
                         ),
                         shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.height(32.dp)
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.heightIn(min = 36.dp)
                     ) {
-                        Text("L$level", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("L$level", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                     }
                 }
             }

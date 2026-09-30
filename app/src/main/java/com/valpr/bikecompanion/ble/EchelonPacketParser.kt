@@ -8,13 +8,9 @@ sealed interface ParsedPacket {
         val speedKmh: Double
     ) : ParsedPacket
 
-    data class ResistanceFrame(
-        val resistanceLevel: Int
-    ) : ParsedPacket
+    data class ResistanceFrame(val resistanceLevel: Int) : ParsedPacket
 
-    data class LockedBikeFrame(
-        val rawBytes: ByteArray
-    ) : ParsedPacket {
+    data class LockedBikeFrame(val rawBytes: ByteArray) : ParsedPacket {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (javaClass != other?.javaClass) return false
@@ -25,10 +21,7 @@ sealed interface ParsedPacket {
         override fun hashCode(): Int = rawBytes.contentHashCode()
     }
 
-    data class UnknownFrame(
-        val rawBytes: ByteArray,
-        val reason: String
-    ) : ParsedPacket {
+    data class UnknownFrame(val rawBytes: ByteArray, val reason: String) : ParsedPacket {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (javaClass != other?.javaClass) return false

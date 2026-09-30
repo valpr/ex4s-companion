@@ -22,7 +22,9 @@ object PhoneWearableRouter {
             val batch = HeartRateBatch.fromByteArray(data)
             if (batch != null && batch.latestBpm > 0) {
                 Action.ForwardHeartRate(batch.latestBpm, batch.timestampMs)
-            } else Action.Ignore
+            } else {
+                Action.Ignore
+            }
         }
         WearableProtocol.PATH_ROTARY_BAILOUT -> Action.Clutch
         WearableProtocol.PATH_RESUME_SLAP -> Action.Resume

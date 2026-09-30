@@ -37,12 +37,7 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    fun updateAthleteBio(
-        age: Int,
-        weightKg: Float,
-        heightCm: Float,
-        sex: BiologicalSex
-    ) {
+    fun updateAthleteBio(age: Int, weightKg: Float, heightCm: Float, sex: BiologicalSex) {
         viewModelScope.launch {
             userProfileRepo.updateAthleteBio(
                 age = age,
@@ -62,12 +57,7 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    fun updateHeartRateSettings(
-        maxHr: Int,
-        criticalHr: Int,
-        restingHr: Int,
-        lthr: Int
-    ) {
+    fun updateHeartRateSettings(maxHr: Int, criticalHr: Int, restingHr: Int, lthr: Int) {
         viewModelScope.launch {
             userProfileRepo.updateHeartRateSettings(
                 maxHr = maxHr,
@@ -84,12 +74,7 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    fun updateEngineTuning(
-        cadenceFloorRpm: Int,
-        cadenceRecoveryRpm: Int,
-        kp: Float,
-        ki: Float
-    ) {
+    fun updateEngineTuning(cadenceFloorRpm: Int, cadenceRecoveryRpm: Int, kp: Float, ki: Float) {
         viewModelScope.launch {
             userProfileRepo.updateEngineTuning(
                 cadenceFloorRpm = cadenceFloorRpm,

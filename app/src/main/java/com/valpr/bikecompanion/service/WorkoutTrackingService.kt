@@ -89,7 +89,11 @@ class WorkoutTrackingService : LifecycleService() {
                 serviceTypes
             )
         } catch (e: SecurityException) {
-            android.util.Log.e("WorkoutTrackingService", "Missing required permission for foreground service: ${e.message}", e)
+            android.util.Log.e(
+                "WorkoutTrackingService",
+                "Missing required permission for foreground service: ${e.message}",
+                e
+            )
             stopSelf()
         } catch (e: Exception) {
             android.util.Log.e("WorkoutTrackingService", "Failed to start foreground service: ${e.message}", e)

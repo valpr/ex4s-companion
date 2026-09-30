@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,15 +24,13 @@ import com.valpr.bikecompanion.workout.WorkoutSegment
 /**
  * Returns a high-contrast zone color corresponding to the given intensity factor (% of FTP).
  */
-fun getZoneColor(intensityFactor: Float): Color {
-    return when {
-        intensityFactor <= 0.55f -> Color(0xFF64B5F6) // Zone 1 Recovery (Light Blue)
-        intensityFactor <= 0.75f -> Color(0xFF2196F3) // Zone 2 Endurance (Blue)
-        intensityFactor <= 0.90f -> Color(0xFF4CAF50) // Zone 3 Tempo (Green)
-        intensityFactor <= 1.05f -> Color(0xFFFFB300) // Zone 4 Threshold / SweetSpot (Yellow/Amber)
-        intensityFactor <= 1.20f -> Color(0xFFFF7043) // Zone 5 VO2 Max (Orange)
-        else -> Color(0xFFE91E63)                     // Zone 6+ Anaerobic (Magenta/Red)
-    }
+fun getZoneColor(intensityFactor: Float): Color = when {
+    intensityFactor <= 0.55f -> Color(0xFF64B5F6) // Zone 1 Recovery (Light Blue)
+    intensityFactor <= 0.75f -> Color(0xFF2196F3) // Zone 2 Endurance (Blue)
+    intensityFactor <= 0.90f -> Color(0xFF4CAF50) // Zone 3 Tempo (Green)
+    intensityFactor <= 1.05f -> Color(0xFFFFB300) // Zone 4 Threshold / SweetSpot (Yellow/Amber)
+    intensityFactor <= 1.20f -> Color(0xFFFF7043) // Zone 5 VO2 Max (Orange)
+    else -> Color(0xFFE91E63) // Zone 6+ Anaerobic (Magenta/Red)
 }
 
 /**

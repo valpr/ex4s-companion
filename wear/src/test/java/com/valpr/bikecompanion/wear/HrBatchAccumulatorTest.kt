@@ -7,7 +7,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HrBatchAccumulatorTest {
-
     @Test
     fun intervalSelection_activeVsAmbient() {
         assertEquals(2500L, HrBatchAccumulator.intervalFor(false))

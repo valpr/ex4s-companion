@@ -13,9 +13,7 @@ object HrChartScaling {
         return Scale(minHr = min, maxHr = max, range = range)
     }
 
-    fun normalizedY(bpm: Int, scale: Scale): Float =
-        ((bpm - scale.minHr) / scale.range).coerceIn(0f, 1f)
+    fun normalizedY(bpm: Int, scale: Scale): Float = ((bpm - scale.minHr) / scale.range).coerceIn(0f, 1f)
 
-    fun stepX(canvasWidth: Float, sampleCount: Int): Float =
-        canvasWidth / (sampleCount - 1).coerceAtLeast(1)
+    fun stepX(canvasWidth: Float, sampleCount: Int): Float = canvasWidth / (sampleCount - 1).coerceAtLeast(1)
 }
