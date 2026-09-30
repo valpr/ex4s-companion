@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="wear_notification_channel_name">Workout Tracking</string>
+    <string name="wear_notification_channel_desc">Shows when a bike workout is actively tracking heart rate</string>
+    <string name="wear_notification_title">Workout Active</string>
+</resources>

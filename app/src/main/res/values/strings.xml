@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">EX-4S Companion</string>
+    <string name="notification_channel_name">Workout Tracking</string>
+    <string name="notification_channel_desc">Active BLE connection and workout metrics</string>
+</resources>
