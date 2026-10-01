@@ -265,11 +265,6 @@ fun AthleteStatsScreen(
                                     onClick = { selectedSex = BiologicalSex.FEMALE },
                                     label = { Text("F", fontSize = 11.sp) }
                                 )
-                                FilterChip(
-                                    selected = selectedSex == BiologicalSex.OTHER,
-                                    onClick = { selectedSex = BiologicalSex.OTHER },
-                                    label = { Text("Other", fontSize = 11.sp) }
-                                )
                             }
                         }
                     }

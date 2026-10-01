@@ -7,8 +7,7 @@ import kotlin.math.roundToInt
  */
 enum class BiologicalSex {
     MALE,
-    FEMALE,
-    OTHER
+    FEMALE
 }
 
 /**
@@ -101,7 +100,7 @@ object AthleteMetrics {
      */
     fun recommendMaxHr(age: Int, sex: BiologicalSex): Int = when (sex) {
         BiologicalSex.FEMALE -> estimateMaxHrGulati(age)
-        else -> estimateMaxHrTanaka(age)
+        BiologicalSex.MALE -> estimateMaxHrTanaka(age)
     }
 
     // --- Power & W/kg Calculations ---
@@ -214,7 +213,6 @@ object AthleteMetrics {
             when (sex) {
                 BiologicalSex.MALE -> base + 5f
                 BiologicalSex.FEMALE -> base - 161f
-                BiologicalSex.OTHER -> base - 78f
             }
         return bmr.roundToInt().coerceAtLeast(500)
     }
