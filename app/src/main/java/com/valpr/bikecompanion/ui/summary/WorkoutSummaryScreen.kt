@@ -336,17 +336,16 @@ private fun HealthSyncCard(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    val distStr = "%.1f km".format(summary.totalDistanceKm)
-                    val calStr = "${summary.totalCaloriesKcal} kcal"
-                    listOf(
-                        "Stationary Bike",
-                        "HR",
-                        "Power",
-                        "Cadence",
-                        "Speed",
-                        distStr,
-                        calStr
-                    ).forEach { chipText ->
+                    val chips = buildList {
+                        add("Stationary Bike")
+                        if (summary.samples.any { it.heartRateBpm > 0 }) add("HR")
+                        if (summary.samples.any { it.watts > 0 }) add("Power")
+                        if (summary.samples.any { it.cadenceRpm > 0 }) add("Cadence")
+                        if (summary.samples.any { it.speedKmh > 0.0 }) add("Speed")
+                        if (summary.totalDistanceKm > 0.0) add("%.1f km".format(summary.totalDistanceKm))
+                        if (summary.totalCaloriesKcal > 0) add("${summary.totalCaloriesKcal} kcal")
+                    }
+                    chips.forEach { chipText ->
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))

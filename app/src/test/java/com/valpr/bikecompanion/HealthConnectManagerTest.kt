@@ -321,9 +321,101 @@ class HealthConnectManagerTest {
     @Test
     fun testRequiredPermissions_includesAllEnrichedTypes() {
         val perms = HealthConnectManager.requiredPermissions()
+        // 8 distinct platform permissions: READ/WRITE_EXERCISE (ExerciseSessionRecord & CyclingPedalingCadenceRecord),
+        // HEART_RATE, POWER, ACTIVE_CALORIES_BURNED, DISTANCE, SPEED, TOTAL_CALORIES_BURNED.
         assertEquals(8, perms.size)
+        assertTrue(
+            perms.contains(
+                androidx.health.connect.client.permission.HealthPermission.getWritePermission(
+                    androidx.health.connect.client.records.CyclingPedalingCadenceRecord::class
+                )
+            )
+        )
         assertTrue(perms.any { it.contains("DISTANCE") })
         assertTrue(perms.any { it.contains("SPEED") })
         assertTrue(perms.any { it.contains("TOTAL_CALORIES") })
+    }
+
+    @Test
+    fun testDeduplicateTimestamps_bumpsCollisions() {
+        val input = listOf(
+            com.valpr.bikecompanion.health.PowerPoint(1000L, 200),
+            com.valpr.bikecompanion.health.PowerPoint(1000L, 210),
+            com.valpr.bikecompanion.health.PowerPoint(1000L, 220)
+        )
+        val result = HealthConnectManager.deduplicateTimestamps(
+            input,
+            timeOf = { it.timeEpochMs },
+            withTime = { p, t -> p.copy(timeEpochMs = t) },
+            sessionEndMs = 5000L
+        )
+        assertEquals(3, result.size)
+        assertEquals(1000L, result[0].timeEpochMs)
+        assertEquals(1001L, result[1].timeEpochMs)
+        assertEquals(1002L, result[2].timeEpochMs)
+    }
+
+    @Test
+    fun testDeduplicateTimestamps_dropsExcessAtSessionEnd() {
+        val input = listOf(
+            com.valpr.bikecompanion.health.PowerPoint(999L, 200),
+            com.valpr.bikecompanion.health.PowerPoint(1000L, 210),
+            com.valpr.bikecompanion.health.PowerPoint(1000L, 220),
+            com.valpr.bikecompanion.health.PowerPoint(1000L, 230)
+        )
+        // End wall at 1001 — room for only one bump
+        val result = HealthConnectManager.deduplicateTimestamps(
+            input,
+            timeOf = { it.timeEpochMs },
+            withTime = { p, t -> p.copy(timeEpochMs = t) },
+            sessionEndMs = 1001L
+        )
+        assertEquals(3, result.size)
+        assertEquals(999L, result[0].timeEpochMs)
+        assertEquals(1000L, result[1].timeEpochMs)
+        assertEquals(1001L, result[2].timeEpochMs)
+    }
+
+    @Test
+    fun testDeduplicateTimestamps_singleItemPassesThrough() {
+        val input = listOf(com.valpr.bikecompanion.health.HrPoint(5000L, 140))
+        val result = HealthConnectManager.deduplicateTimestamps(
+            input,
+            timeOf = { it.timeEpochMs },
+            withTime = { p, t -> p.copy(timeEpochMs = t) },
+            sessionEndMs = 10000L
+        )
+        assertEquals(1, result.size)
+        assertEquals(5000L, result[0].timeEpochMs)
+    }
+
+    @Test
+    fun testPlanRecords_duplicateElapsedSecondsProduceMonotonicTimestamps() {
+        val startMs = 1_716_000_000_000L
+        // Simulate pause/resume producing duplicate elapsedSeconds=5
+        val samples = listOf(
+            sample(elapsed = 5, hr = 130, watts = 180),
+            sample(elapsed = 5, hr = 131, watts = 181),
+            sample(elapsed = 5, hr = 132, watts = 182),
+            sample(elapsed = 10, hr = 140, watts = 200)
+        )
+        val s = summary(durationSeconds = 60, startMs = startMs, samples = samples)
+        val plan = HealthConnectManager.planRecords(s, 75.0)
+
+        // HR, power, speed, cadence — all must have strictly increasing timestamps
+        for (i in 1 until plan.hrPoints.size) {
+            assertTrue(
+                "HR timestamps not strictly increasing at index $i",
+                plan.hrPoints[i].timeEpochMs > plan.hrPoints[i - 1].timeEpochMs
+            )
+        }
+        for (chunk in plan.powerChunks) {
+            for (i in 1 until chunk.size) {
+                assertTrue(
+                    "Power timestamps not strictly increasing at index $i",
+                    chunk[i].timeEpochMs > chunk[i - 1].timeEpochMs
+                )
+            }
+        }
     }
 }

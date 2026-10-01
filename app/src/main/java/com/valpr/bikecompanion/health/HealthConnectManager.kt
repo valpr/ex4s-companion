@@ -34,6 +34,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.time.ZoneId
 
@@ -127,6 +129,7 @@ class HealthConnectManager(
             HealthPermission.getWritePermission(ActiveCaloriesBurnedRecord::class),
             HealthPermission.getWritePermission(DistanceRecord::class),
             HealthPermission.getWritePermission(SpeedRecord::class),
+            HealthPermission.getWritePermission(CyclingPedalingCadenceRecord::class),
             HealthPermission.getWritePermission(TotalCaloriesBurnedRecord::class)
         )
 
@@ -164,6 +167,33 @@ class HealthConnectManager(
         }
 
         /**
+         * Ensures sample timestamps are strictly increasing within a list.
+         * Health Connect rejects series records whose samples share a timestamp.
+         * Duplicates get +1ms bumps; the result is re-clamped to [sessionEndMs].
+         */
+        internal fun <T> deduplicateTimestamps(
+            items: List<T>,
+            timeOf: (T) -> Long,
+            withTime: (T, Long) -> T,
+            sessionEndMs: Long
+        ): List<T> {
+            if (items.size <= 1) return items
+            val result = mutableListOf(items.first())
+            var lastTs = timeOf(items.first())
+            for (i in 1 until items.size) {
+                var ts = timeOf(items[i])
+                if (ts <= lastTs) {
+                    ts = (lastTs + 1).coerceAtMost(sessionEndMs)
+                }
+                // If bumped timestamp still collides (session end wall), skip sample
+                if (ts <= lastTs) continue
+                result += withTime(items[i], ts)
+                lastTs = ts
+            }
+            return result
+        }
+
+        /**
          * Pure dedup predicate (JVM-testable): returns true if any existing session matches
          * the candidate's clientRecordId or has identical time window + title.
          */
@@ -197,14 +227,19 @@ class HealthConnectManager(
             val start = if (summary.startTimeEpochMs > 0) summary.startTimeEpochMs else endHint - durationMs
             val end = start + durationMs
 
-            val hrPoints = summary.samples
-                .filter { it.heartRateBpm > 0 }
-                .map { sample ->
-                    HrPoint(
-                        timeEpochMs = (start + sample.elapsedSeconds * 1000L).coerceIn(start, end),
-                        bpm = sample.heartRateBpm
-                    )
-                }
+            val hrPoints = deduplicateTimestamps(
+                summary.samples
+                    .filter { it.heartRateBpm > 0 }
+                    .map { sample ->
+                        HrPoint(
+                            timeEpochMs = (start + sample.elapsedSeconds * 1000L).coerceIn(start, end),
+                            bpm = sample.heartRateBpm
+                        )
+                    },
+                timeOf = { it.timeEpochMs },
+                withTime = { p, t -> p.copy(timeEpochMs = t) },
+                sessionEndMs = end
+            )
 
             // Chunk power samples into ≤30-min buckets keyed by elapsed second.
             val powerChunks = summary.samples
@@ -212,12 +247,17 @@ class HealthConnectManager(
                 .toSortedMap()
                 .values
                 .map { bucket ->
-                    bucket.map { sample ->
-                        PowerPoint(
-                            timeEpochMs = (start + sample.elapsedSeconds * 1000L).coerceIn(start, end),
-                            watts = sample.watts.coerceAtLeast(0)
-                        )
-                    }
+                    deduplicateTimestamps(
+                        bucket.map { sample ->
+                            PowerPoint(
+                                timeEpochMs = (start + sample.elapsedSeconds * 1000L).coerceIn(start, end),
+                                watts = sample.watts.coerceAtLeast(0)
+                            )
+                        },
+                        timeOf = { it.timeEpochMs },
+                        withTime = { p, t -> p.copy(timeEpochMs = t) },
+                        sessionEndMs = end
+                    )
                 }
                 .filter { it.isNotEmpty() }
 
@@ -228,12 +268,17 @@ class HealthConnectManager(
                 .toSortedMap()
                 .values
                 .map { bucket ->
-                    bucket.map { sample ->
-                        SpeedPoint(
-                            timeEpochMs = (start + sample.elapsedSeconds * 1000L).coerceIn(start, end),
-                            speedKmh = sample.speedKmh.coerceAtLeast(0.0)
-                        )
-                    }
+                    deduplicateTimestamps(
+                        bucket.map { sample ->
+                            SpeedPoint(
+                                timeEpochMs = (start + sample.elapsedSeconds * 1000L).coerceIn(start, end),
+                                speedKmh = sample.speedKmh.coerceAtLeast(0.0)
+                            )
+                        },
+                        timeOf = { it.timeEpochMs },
+                        withTime = { p, t -> p.copy(timeEpochMs = t) },
+                        sessionEndMs = end
+                    )
                 }
                 .filter { it.isNotEmpty() }
 
@@ -244,12 +289,17 @@ class HealthConnectManager(
                 .toSortedMap()
                 .values
                 .map { bucket ->
-                    bucket.map { sample ->
-                        CadencePoint(
-                            timeEpochMs = (start + sample.elapsedSeconds * 1000L).coerceIn(start, end),
-                            cadenceRpm = sample.cadenceRpm.coerceAtLeast(0)
-                        )
-                    }
+                    deduplicateTimestamps(
+                        bucket.map { sample ->
+                            CadencePoint(
+                                timeEpochMs = (start + sample.elapsedSeconds * 1000L).coerceIn(start, end),
+                                cadenceRpm = sample.cadenceRpm.coerceAtLeast(0)
+                            )
+                        },
+                        timeOf = { it.timeEpochMs },
+                        withTime = { p, t -> p.copy(timeEpochMs = t) },
+                        sessionEndMs = end
+                    )
                 }
                 .filter { it.isNotEmpty() }
 
@@ -467,7 +517,7 @@ class HealthConnectManager(
                 )
             }
 
-            if (plan.totalDistanceMeters >= 0.0) {
+            if (plan.totalDistanceMeters > 0.0) {
                 records += DistanceRecord(
                     startTime = start,
                     startZoneOffset = zoneOffset,
@@ -508,6 +558,7 @@ class HealthConnectManager(
 
     private var lastSummary: WorkoutSummary? = null
     private var lastWeightKg: Float = 75.0f
+    private val syncMutex = Mutex()
 
     private fun clientOrNull(): HealthConnectClient? = try {
         HealthConnectClient.getOrCreate(context)
@@ -548,68 +599,74 @@ class HealthConnectManager(
         lastSummary = summary
         lastWeightKg = weightKg
         scope.launch {
-            _syncState.value = HealthSyncState.Syncing
-            val client = clientOrNull()
-            if (client == null) {
-                _syncState.value = HealthSyncState.NotAvailable
-                return@launch
-            }
-            val hasPermissions = try {
-                client.permissionController.getGrantedPermissions().containsAll(requiredPermissions())
-            } catch (e: Exception) {
-                Log.w(TAG, "Permission check failed: ${e.message}")
-                false
-            }
-            if (!hasPermissions) {
-                _syncState.value = HealthSyncState.PermissionRequired
-                return@launch
-            }
-            try {
-                val plan = planRecords(summary, weightKg.toDouble())
-                val clientRecordId = CompletedRide.rideIdFor(plan.sessionStartEpochMs)
-
-                // Pre-read dedup check: verify session hasn't already been written
-                val start = Instant.ofEpochMilli(plan.sessionStartEpochMs)
-                val end = Instant.ofEpochMilli(plan.sessionEndEpochMs)
-                val existing = try {
-                    client.readRecords(
-                        ReadRecordsRequest(
-                            recordType = ExerciseSessionRecord::class,
-                            timeRangeFilter = TimeRangeFilter.between(start, end)
-                        )
-                    ).records.map {
-                        SessionRecordSummary(
-                            clientRecordId = it.metadata.clientRecordId,
-                            startTimeEpochMs = it.startTime.toEpochMilli(),
-                            endTimeEpochMs = it.endTime.toEpochMilli(),
-                            title = it.title
-                        )
-                    }
+            syncMutex.withLock {
+                _syncState.value = HealthSyncState.Syncing
+                val client = clientOrNull()
+                if (client == null) {
+                    _syncState.value = HealthSyncState.NotAvailable
+                    return@withLock
+                }
+                val hasPermissions = try {
+                    client.permissionController.getGrantedPermissions()
+                        .containsAll(requiredPermissions())
                 } catch (e: Exception) {
-                    Log.w(TAG, "Pre-read dedup check failed: ${e.message}")
-                    emptyList()
+                    Log.w(TAG, "Permission check failed: ${e.message}")
+                    false
                 }
+                if (!hasPermissions) {
+                    _syncState.value = HealthSyncState.PermissionRequired
+                    return@withLock
+                }
+                try {
+                    val plan = planRecords(summary, weightKg.toDouble())
+                    val clientRecordId = CompletedRide.rideIdFor(plan.sessionStartEpochMs)
 
-                if (isDuplicateSession(
-                        existing = existing,
-                        expectedClientId = clientRecordId,
-                        expectedStartMs = plan.sessionStartEpochMs,
-                        expectedEndMs = plan.sessionEndEpochMs,
-                        expectedTitle = summary.workoutName
-                    )
-                ) {
-                    Log.i(TAG, "Session $clientRecordId already synced to Health Connect; skipping duplicate insert")
+                    // Pre-read dedup check: verify session hasn't already been written
+                    val start = Instant.ofEpochMilli(plan.sessionStartEpochMs)
+                    val end = Instant.ofEpochMilli(plan.sessionEndEpochMs)
+                    val existing = try {
+                        client.readRecords(
+                            ReadRecordsRequest(
+                                recordType = ExerciseSessionRecord::class,
+                                timeRangeFilter = TimeRangeFilter.between(start, end)
+                            )
+                        ).records.map {
+                            SessionRecordSummary(
+                                clientRecordId = it.metadata.clientRecordId,
+                                startTimeEpochMs = it.startTime.toEpochMilli(),
+                                endTimeEpochMs = it.endTime.toEpochMilli(),
+                                title = it.title
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Pre-read dedup check failed: ${e.message}")
+                        emptyList()
+                    }
+
+                    if (isDuplicateSession(
+                            existing = existing,
+                            expectedClientId = clientRecordId,
+                            expectedStartMs = plan.sessionStartEpochMs,
+                            expectedEndMs = plan.sessionEndEpochMs,
+                            expectedTitle = summary.workoutName
+                        )
+                    ) {
+                        Log.i(
+                            TAG,
+                            "Session $clientRecordId already synced to Health Connect; skipping duplicate insert"
+                        )
+                        _syncState.value = HealthSyncState.Success
+                        return@withLock
+                    }
+
+                    val records = toHealthRecords(plan, summary.workoutName, clientRecordId)
+                    client.insertRecords(records)
+                    Log.i(TAG, "Synced ${summary.workoutName}: ${records.size} records")
                     _syncState.value = HealthSyncState.Success
-                    return@launch
+                } catch (e: Exception) {
+                    Log.w(TAG, "Health Connect write failed: ${e.message}")
+                    _syncState.value = HealthSyncState.Failed(e.message ?: "Unknown error")
                 }
-
-                val records = toHealthRecords(plan, summary.workoutName, clientRecordId)
-                client.insertRecords(records)
-                Log.i(TAG, "Synced ${summary.workoutName}: ${records.size} records")
-                _syncState.value = HealthSyncState.Success
-            } catch (e: Exception) {
-                Log.w(TAG, "Health Connect write failed: ${e.message}")
-                _syncState.value = HealthSyncState.Failed(e.message ?: "Unknown error")
             }
         }
     }

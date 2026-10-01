@@ -143,4 +143,16 @@ class UserProfileRepositoryTest {
         assertEquals(54, p.restingHeartRate)
         assertTrue(p.lastUpdatedEpochMs >= before)
     }
+
+    @Test
+    fun applyHealthImport_nullsPreserveExistingVitals() = runTest {
+        val r = repo()
+        r.updateAthleteBio(age = 30, weightKg = 80.0f, heightCm = 180.0f, sex = BiologicalSex.MALE)
+        val before = System.currentTimeMillis()
+        r.applyHealthImport(weightKg = null, heightCm = null, restingHeartRate = null)
+        val p = r.userProfileFlow.first()
+        assertEquals(80.0f, p.weightKg, 0.001f)
+        assertEquals(180.0f, p.heightCm, 0.001f)
+        assertTrue(p.lastUpdatedEpochMs >= before)
+    }
 }

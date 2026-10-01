@@ -11,6 +11,7 @@ import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
@@ -29,7 +30,8 @@ class HealthConnectReader(
             Log.w("HealthConnectReader", "Health Connect client unavailable: ${e.message}")
             null
         }
-    }
+    },
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     companion object {
         private const val TAG = "HealthConnectReader"
@@ -61,7 +63,7 @@ class HealthConnectReader(
     suspend fun fetchImportPreview(
         currentProfileLastUpdatedEpochMs: Long,
         lookbackDays: Long = 7L
-    ): Result<HealthImportPreview> = withContext(Dispatchers.IO) {
+    ): Result<HealthImportPreview> = withContext(ioDispatcher) {
         val client = clientProvider() ?: return@withContext Result.failure(
             IllegalStateException("Health Connect is unavailable on this device")
         )

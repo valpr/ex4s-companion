@@ -71,13 +71,25 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
             val height = preview.heightCm?.let { if (!it.isStaleComparedToProfile || includeStale) it.value else null }
             val restingHr = preview.restingHeartRate?.let { if (!it.isStaleComparedToProfile || includeStale) it.value else null }
 
+            if (weight == null && height == null && restingHr == null) {
+                _importPreview.value = null
+                _saveEvents.tryEmit("No new metrics to import")
+                return@launch
+            }
+
             userProfileRepo.applyHealthImport(
                 weightKg = weight,
                 heightCm = height,
                 restingHeartRate = restingHr
             )
             _importPreview.value = null
-            _saveEvents.tryEmit("Imported vitals from Health Connect")
+
+            val imported = listOfNotNull(
+                if (weight != null) "weight" else null,
+                if (height != null) "height" else null,
+                if (restingHr != null) "resting HR" else null
+            )
+            _saveEvents.tryEmit("Imported ${imported.joinToString(", ")} from Health Connect")
         }
     }
 
