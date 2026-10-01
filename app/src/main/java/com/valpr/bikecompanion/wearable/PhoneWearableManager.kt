@@ -54,6 +54,7 @@ class PhoneWearableManager(
 
     companion object {
         private const val TAG = "PhoneWearableManager"
+        private const val NODE_REFRESH_INTERVAL_MS = 15_000L
     }
 
     private val messageClient: MessageClient by lazy {
@@ -71,6 +72,7 @@ class PhoneWearableManager(
 
     private var stateSyncJob: Job? = null
     private var hapticJob: Job? = null
+    private var lastNodeRefreshMs = 0L
 
     init {
         try {
@@ -86,23 +88,54 @@ class PhoneWearableManager(
     }
 
     /**
+     * Updates active watch node state, auto-syncing current workout if newly connected.
+     */
+    fun updateWatchNode(node: Node) {
+        val wasConnected = _watchState.value.isConnected
+        val prevNodeId = _watchState.value.nodeId
+        _watchState.update {
+            it.copy(
+                isConnected = true,
+                nodeName = node.displayName.ifBlank { "Pixel Watch" },
+                nodeId = node.id
+            )
+        }
+        Log.d(TAG, "Watch node updated: ${node.displayName} (${node.id})")
+        if ((!wasConnected || prevNodeId != node.id) &&
+            sessionManager.sessionState.value.status != SessionStatus.IDLE
+        ) {
+            sendCurrentWorkoutState(node.id)
+        }
+    }
+
+    /**
      * Queries connected Wear OS nodes and updates live watch connection state.
+     * Prefers nodes with CAPABILITY_WEAR_APP; falls back to connectedNodes.
      */
     fun refreshConnectedNodes() {
         scope.launch {
+            try {
+                val capabilityInfo = Tasks.await(
+                    capabilityClient.getCapability(
+                        WearableProtocol.CAPABILITY_WEAR_APP,
+                        CapabilityClient.FILTER_REACHABLE
+                    )
+                )
+                val reachableNode = capabilityInfo.nodes.firstOrNull()
+                if (reachableNode != null) {
+                    updateWatchNode(reachableNode)
+                    return@launch
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Capability query failed, falling back to connectedNodes: ${e.message}")
+            }
+
             try {
                 val nodes: List<Node> = Tasks.await(nodeClient.connectedNodes)
                 val primaryNode = nodes.firstOrNull()
 
                 if (primaryNode != null) {
-                    _watchState.update {
-                        it.copy(
-                            isConnected = true,
-                            nodeName = primaryNode.displayName.ifBlank { "Pixel Watch" },
-                            nodeId = primaryNode.id
-                        )
-                    }
-                    Log.d(TAG, "Connected to watch node: ${primaryNode.displayName} (${primaryNode.id})")
+                    updateWatchNode(primaryNode)
                 } else {
                     _watchState.update {
                         it.copy(
@@ -119,7 +152,33 @@ class PhoneWearableManager(
         }
     }
 
+    fun onPeerConnected(peer: Node) {
+        Log.i(TAG, "Watch peer connected: ${peer.displayName} (${peer.id})")
+        updateWatchNode(peer)
+    }
+
+    fun onPeerDisconnected(peer: Node) {
+        Log.i(TAG, "Watch peer disconnected: ${peer.displayName} (${peer.id})")
+        if (_watchState.value.nodeId == peer.id) {
+            _watchState.update { it.copy(isConnected = false) }
+        }
+        refreshConnectedNodes()
+    }
+
     override fun onMessageReceived(messageEvent: MessageEvent) {
+        val sourceNodeId = messageEvent.sourceNodeId
+        if (sourceNodeId.isNotBlank() &&
+            (!_watchState.value.isConnected || _watchState.value.nodeId.isBlank())
+        ) {
+            _watchState.update {
+                it.copy(
+                    isConnected = true,
+                    nodeId = sourceNodeId,
+                    nodeName = it.nodeName.ifBlank { "Pixel Watch" }
+                )
+            }
+        }
+
         when (val action = PhoneWearableRouter.route(messageEvent.path, messageEvent.data)) {
             is PhoneWearableRouter.Action.ForwardHeartRate -> {
                 _watchState.update {
@@ -142,6 +201,11 @@ class PhoneWearableManager(
                 sessionManager.resumeManually()
             }
 
+            PhoneWearableRouter.Action.RequestWorkoutState -> {
+                Log.i(TAG, "Received RequestWorkoutState from watch ($sourceNodeId)")
+                sendCurrentWorkoutState(sourceNodeId.ifBlank { null })
+            }
+
             PhoneWearableRouter.Action.Ignore -> {
                 Log.d(TAG, "Received unhandled wearable message: ${messageEvent.path}")
             }
@@ -149,7 +213,64 @@ class PhoneWearableManager(
     }
 
     override fun onCapabilityChanged(capabilityInfo: com.google.android.gms.wearable.CapabilityInfo) {
-        refreshConnectedNodes()
+        val reachableNode = capabilityInfo.nodes.firstOrNull()
+        if (reachableNode != null) {
+            updateWatchNode(reachableNode)
+        } else {
+            refreshConnectedNodes()
+        }
+    }
+
+    /**
+     * Immediately dispatches the current workout state to the specified watch node or active node.
+     */
+    fun sendCurrentWorkoutState(targetNodeIdOverride: String? = null) {
+        val targetNodeId = targetNodeIdOverride ?: _watchState.value.nodeId
+        if (targetNodeId.isBlank()) return
+
+        scope.launch {
+            val session = sessionManager.sessionState.value
+            val statusCode = when (session.status) {
+                SessionStatus.IDLE -> WorkoutStateMessage.STATUS_IDLE
+                SessionStatus.RUNNING -> WorkoutStateMessage.STATUS_RUNNING
+                SessionStatus.PAUSED -> WorkoutStateMessage.STATUS_PAUSED
+                SessionStatus.COMPLETED -> WorkoutStateMessage.STATUS_COMPLETED
+            }
+
+            val ergState = session.ergDecision?.state
+            val isBailout = ergState == ErgState.MANUAL_BAILOUT
+            val isCadenceFloor = ergState == ErgState.CADENCE_FLOOR_BAILOUT
+            val isHrCapped = session.ergDecision?.isHrCapped == true || session.isCriticalHrActive
+            val targetWatts = session.targetWatts ?: -1
+
+            val message = WorkoutStateMessage(
+                sessionStatus = statusCode,
+                elapsedSeconds = session.elapsedSeconds,
+                targetWatts = targetWatts,
+                currentWatts = session.latestTelemetry.estimatedWatts,
+                cadenceRpm = session.latestTelemetry.cadenceRpm,
+                heartRateBpm = session.currentHeartRate,
+                isBailoutActive = isBailout,
+                isCadenceFloorActive = isCadenceFloor,
+                isHrCapped = isHrCapped,
+                workoutName = session.workout?.name
+                    ?: if (session.isFreeRide && session.status != SessionStatus.IDLE) "Free Ride" else "",
+                athleteMaxHr = session.athleteMaxHr
+            )
+
+            try {
+                Tasks.await(
+                    messageClient.sendMessage(
+                        targetNodeId,
+                        WearableProtocol.PATH_WORKOUT_STATE,
+                        message.toByteArray()
+                    )
+                )
+                Log.d(TAG, "Dispatched workout state to watch ($targetNodeId): status=$statusCode, name=${message.workoutName}")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to send workout state to watch: ${e.message}")
+            }
+        }
     }
 
     /**
@@ -187,6 +308,13 @@ class PhoneWearableManager(
                     targetWatts = targetWatts,
                     athleteMaxHr = session.athleteMaxHr
                 )
+                if (targetNodeId.isBlank() && session.status != SessionStatus.IDLE) {
+                    if (now - lastNodeRefreshMs >= NODE_REFRESH_INTERVAL_MS) {
+                        lastNodeRefreshMs = now
+                        refreshConnectedNodes()
+                    }
+                }
+
                 if (!WearSyncDecision.shouldSync(now, lastSentMs, current, lastKeys, targetNodeId.isBlank())) {
                     return@collect
                 }

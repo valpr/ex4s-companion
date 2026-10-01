@@ -3,6 +3,8 @@ package com.valpr.bikecompanion.wear.messaging
 import android.content.Context
 import android.util.Log
 import com.google.android.gms.tasks.Tasks
+import com.google.android.gms.wearable.CapabilityClient
+import com.google.android.gms.wearable.CapabilityInfo
 import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Node
@@ -32,11 +34,15 @@ class WearMessageManager(
     private val hapticManager: WatchHapticManager,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     messageClientOverride: MessageClient? = null,
-    nodeClientOverride: NodeClient? = null
-) : MessageClient.OnMessageReceivedListener {
+    nodeClientOverride: NodeClient? = null,
+    capabilityClientOverride: CapabilityClient? = null,
+    private val clock: () -> Long = System::currentTimeMillis
+) : MessageClient.OnMessageReceivedListener,
+    CapabilityClient.OnCapabilityChangedListener {
 
     companion object {
         private const val TAG = "WearMessageManager"
+        private const val REQUEST_STATE_DEBOUNCE_MS = 5000L
     }
 
     private val messageClient: MessageClient by lazy {
@@ -44,6 +50,9 @@ class WearMessageManager(
     }
     private val nodeClient: NodeClient by lazy {
         nodeClientOverride ?: Wearable.getNodeClient(context)
+    }
+    private val capabilityClient: CapabilityClient by lazy {
+        capabilityClientOverride ?: Wearable.getCapabilityClient(context)
     }
 
     private val _isPhoneConnected = MutableStateFlow(false)
@@ -54,24 +63,84 @@ class WearMessageManager(
     private val _workoutState = MutableStateFlow<WorkoutStateMessage?>(null)
     val workoutState: StateFlow<WorkoutStateMessage?> = _workoutState.asStateFlow()
 
+    private var lastRequestStateMs = 0L
+
     init {
         try {
             messageClient.addListener(this)
+            capabilityClient.addListener(this, WearableProtocol.CAPABILITY_PHONE_APP)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to register Wearable message listener: ${e.message}", e)
         }
         refreshConnectedPhone()
     }
 
+    /**
+     * Updates paired phone node ID and triggers workout state query if needed.
+     */
+    fun updatePhoneNode(nodeId: String, displayName: String = "Phone") {
+        if (nodeId.isNotBlank()) {
+            val wasConnected = _isPhoneConnected.value
+            val prevNodeId = _phoneNodeId.value
+            _phoneNodeId.value = nodeId
+            _isPhoneConnected.value = true
+            Log.d(TAG, "Phone node updated: $displayName ($nodeId)")
+            if (!wasConnected || prevNodeId != nodeId || _workoutState.value == null) {
+                requestWorkoutState()
+            }
+        }
+    }
+
+    /**
+     * Requests active workout state from the connected phone.
+     */
+    fun requestWorkoutState() {
+        val now = clock()
+        if (now - lastRequestStateMs < REQUEST_STATE_DEBOUNCE_MS) return
+
+        val target = _phoneNodeId.value
+        if (!WearMessageRouter.canSend(target)) return
+        val nodeId = target!!
+        lastRequestStateMs = now
+        scope.launch {
+            try {
+                Tasks.await(
+                    messageClient.sendMessage(
+                        nodeId,
+                        WearableProtocol.PATH_REQUEST_STATE,
+                        byteArrayOf(0x01)
+                    )
+                )
+                Log.d(TAG, "Dispatched requestWorkoutState to phone ($nodeId)")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to send requestWorkoutState to phone: ${e.message}")
+            }
+        }
+    }
+
     fun refreshConnectedPhone() {
         scope.launch {
+            try {
+                val capabilityInfo = Tasks.await(
+                    capabilityClient.getCapability(
+                        WearableProtocol.CAPABILITY_PHONE_APP,
+                        CapabilityClient.FILTER_REACHABLE
+                    )
+                )
+                val reachablePhone = capabilityInfo.nodes.firstOrNull()
+                if (reachablePhone != null) {
+                    updatePhoneNode(reachablePhone.id, reachablePhone.displayName)
+                    return@launch
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Phone capability query failed, falling back to connectedNodes: ${e.message}")
+            }
+
             try {
                 val nodes: List<Node> = Tasks.await(nodeClient.connectedNodes)
                 val phone = nodes.firstOrNull()
                 if (phone != null) {
-                    _phoneNodeId.value = phone.id
-                    _isPhoneConnected.value = true
-                    Log.d(TAG, "Connected to phone node: ${phone.displayName} (${phone.id})")
+                    updatePhoneNode(phone.id, phone.displayName)
                 } else {
                     _phoneNodeId.value = null
                     _isPhoneConnected.value = false
@@ -84,6 +153,12 @@ class WearMessageManager(
     }
 
     override fun onMessageReceived(messageEvent: MessageEvent) {
+        if (messageEvent.sourceNodeId.isNotBlank() &&
+            (!_isPhoneConnected.value || _phoneNodeId.value.isNullOrBlank())
+        ) {
+            updatePhoneNode(messageEvent.sourceNodeId)
+        }
+
         when (val action = WearMessageRouter.route(messageEvent.path, messageEvent.data)) {
             is WearMessageRouter.Action.UpdateState -> {
                 updateWorkoutState(action.state)
@@ -95,6 +170,15 @@ class WearMessageManager(
             WearMessageRouter.Action.Ignore -> {
                 Log.d(TAG, "Unhandled message path: ${messageEvent.path}")
             }
+        }
+    }
+
+    override fun onCapabilityChanged(capabilityInfo: CapabilityInfo) {
+        val reachablePhone = capabilityInfo.nodes.firstOrNull()
+        if (reachablePhone != null) {
+            updatePhoneNode(reachablePhone.id, reachablePhone.displayName)
+        } else {
+            refreshConnectedPhone()
         }
     }
 
@@ -184,8 +268,9 @@ class WearMessageManager(
     fun onDestroy() {
         try {
             messageClient.removeListener(this)
+            capabilityClient.removeListener(this)
         } catch (e: Exception) {
-            Log.w(TAG, "Error unregistering messageClient: ${e.message}")
+            Log.w(TAG, "Error unregistering Wearable listeners: ${e.message}")
         }
         scope.cancel()
     }

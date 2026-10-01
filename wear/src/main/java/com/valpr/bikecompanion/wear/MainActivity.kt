@@ -79,6 +79,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         messageManager.refreshConnectedPhone()
+        messageManager.requestWorkoutState()
         // When active UI returns to foreground, prioritize low-latency batching
         healthServicesManager.setAmbientMode(isAmbientMode)
     }
@@ -129,11 +130,13 @@ fun WearApp(messageManager: WearMessageManager, healthServicesManager: HealthSer
         focusRequester.requestFocus()
     }
 
-    // Auto-start foreground tracking service when workout becomes active on phone, stop when idle/completed.
+    // Auto-start foreground tracking service when workout becomes active on phone, stop when explicitly idle/completed.
+    // Invariant (AGENTS.md §5): null state represents uninitialized transition window and must NOT stop service.
     LaunchedEffect(workoutState?.sessionStatus) {
-        if (workoutState?.isRunning == true || workoutState?.isPaused == true) {
+        val state = workoutState ?: return@LaunchedEffect
+        if (state.isRunning || state.isPaused) {
             WearWorkoutTrackingService.start(context)
-        } else if (workoutState == null || workoutState?.isIdle == true || workoutState?.isCompleted == true) {
+        } else if (state.isIdle || state.isCompleted) {
             WearWorkoutTrackingService.stop(context)
         }
     }
@@ -185,7 +188,8 @@ fun WearApp(messageManager: WearMessageManager, healthServicesManager: HealthSer
             else -> {
                 StandbyScreen(
                     isPhoneConnected = isPhoneConnected,
-                    currentHeartRate = liveHr
+                    currentHeartRate = liveHr,
+                    onSyncRequested = { messageManager.requestWorkoutState() }
                 )
             }
         }

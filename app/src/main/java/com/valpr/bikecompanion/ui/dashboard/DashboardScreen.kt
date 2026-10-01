@@ -163,6 +163,7 @@ fun DashboardScreen(
                             viewModel.updateFtp(enteredFtp)
                             showFtpPromptDialog = false
                             pendingWorkoutToStart?.let { workout ->
+                                viewModel.refreshWatchConnection()
                                 val result = viewModel.sessionManager.startWorkout(workout)
                                 if (result.isSuccess) {
                                     onStartWorkout()
@@ -236,6 +237,7 @@ fun DashboardScreen(
                             pendingWorkoutToStart = workout
                             showFtpPromptDialog = true
                         } else {
+                            viewModel.refreshWatchConnection()
                             val result = viewModel.sessionManager.startWorkout(workout)
                             if (result.isSuccess) {
                                 onStartWorkout()
@@ -321,7 +323,10 @@ fun DashboardScreen(
 
             // 2. Pixel Watch Status Pill
             item {
-                PixelWatchStatusCard(watchState = watchState)
+                PixelWatchStatusCard(
+                    watchState = watchState,
+                    onRefresh = { viewModel.refreshWatchConnection() }
+                )
             }
 
             // 3. Quick Start (Free Ride)
@@ -329,6 +334,7 @@ fun DashboardScreen(
                 QuickStartCard(
                     enabled = isBikeConnected,
                     onStartFreeRide = {
+                        viewModel.refreshWatchConnection()
                         val result = viewModel.sessionManager.startWorkout(null)
                         if (result.isSuccess) {
                             onStartWorkout()
@@ -476,7 +482,10 @@ private fun BikeConnectionCard(
 }
 
 @Composable
-private fun PixelWatchStatusCard(watchState: com.valpr.bikecompanion.wearable.WearableWatchState) {
+private fun PixelWatchStatusCard(
+    watchState: com.valpr.bikecompanion.wearable.WearableWatchState,
+    onRefresh: () -> Unit = {}
+) {
     val isConnected = watchState.isConnected
     val containerColor = if (isConnected) {
         Color(
@@ -490,7 +499,9 @@ private fun PixelWatchStatusCard(watchState: com.valpr.bikecompanion.wearable.We
     Card(
         colors = CardDefaults.cardColors(containerColor = containerColor),
         shape = RoundedCornerShape(10.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onRefresh() }
     ) {
         Row(
             modifier = Modifier

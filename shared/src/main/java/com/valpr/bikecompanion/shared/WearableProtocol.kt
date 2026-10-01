@@ -16,6 +16,7 @@ object WearableProtocol {
     const val PATH_RESUME_SLAP = "/workout/resume"
     const val PATH_WORKOUT_STATE = "/workout/state"
     const val PATH_HAPTIC_TRIGGER = "/workout/haptic"
+    const val PATH_REQUEST_STATE = "/workout/request_state"
 
     // Capabilities
     const val CAPABILITY_PHONE_APP = "bike_companion_phone"

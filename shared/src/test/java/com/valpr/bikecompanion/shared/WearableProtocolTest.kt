@@ -9,6 +9,18 @@ import org.junit.Test
 
 class WearableProtocolTest {
     @Test
+    fun testProtocolConstants() {
+        assertEquals("/telemetry/hr", WearableProtocol.PATH_HEART_RATE)
+        assertEquals("/workout/bailout", WearableProtocol.PATH_ROTARY_BAILOUT)
+        assertEquals("/workout/resume", WearableProtocol.PATH_RESUME_SLAP)
+        assertEquals("/workout/state", WearableProtocol.PATH_WORKOUT_STATE)
+        assertEquals("/workout/haptic", WearableProtocol.PATH_HAPTIC_TRIGGER)
+        assertEquals("/workout/request_state", WearableProtocol.PATH_REQUEST_STATE)
+        assertEquals("bike_companion_phone", WearableProtocol.CAPABILITY_PHONE_APP)
+        assertEquals("bike_companion_wear", WearableProtocol.CAPABILITY_WEAR_APP)
+    }
+
+    @Test
     fun testHeartRateBatchSerializationAndDeserialization() {
         val original =
             HeartRateBatch(

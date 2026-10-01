@@ -2,7 +2,9 @@ package com.valpr.bikecompanion.wear.messaging
 
 import android.content.Intent
 import android.util.Log
+import com.google.android.gms.wearable.CapabilityInfo
 import com.google.android.gms.wearable.MessageEvent
+import com.google.android.gms.wearable.Node
 import com.google.android.gms.wearable.WearableListenerService
 import com.valpr.bikecompanion.shared.HapticAlertType
 import com.valpr.bikecompanion.shared.WearableProtocol
@@ -16,9 +18,9 @@ import com.valpr.bikecompanion.wear.service.WearWorkoutTrackingService
  * when messages arrive from the phone.
  *
  * Low-power invariant: plain 1Hz workout-state telemetry must NOT wake the AP every
- * second. Only wake when user attention is required (bailout / resume / haptics /
- * pause / completion). Active telemetry is received by [WearMessageManager] while
- * the app is already open.
+ * second. Only wake when user attention is required (workout start / bailout / resume /
+ * haptics / pause / completion). Active telemetry is received by [WearMessageManager]
+ * while the app is already open.
  */
 class WearMessageListenerService : WearableListenerService() {
     enum class ServiceAction {
@@ -31,14 +33,23 @@ class WearMessageListenerService : WearableListenerService() {
         private const val TAG = "WearMsgListenerSvc"
 
         /** Pure wake-filter (JVM-testable): steady telemetry must not wake the AP. */
-        fun shouldWakeForMessage(path: String, data: ByteArray): Boolean = when (path) {
+        fun shouldWakeForMessage(
+            path: String,
+            data: ByteArray,
+            previousState: WorkoutStateMessage? = null
+        ): Boolean = when (path) {
             WearableProtocol.PATH_HAPTIC_TRIGGER -> true
             WearableProtocol.PATH_WORKOUT_STATE -> {
-                val state = WorkoutStateMessage.fromByteArray(data)
-                state?.isBailoutActive == true ||
-                    state?.isCadenceFloorActive == true ||
-                    state?.isPaused == true ||
-                    state?.isCompleted == true
+                val state = WorkoutStateMessage.fromByteArray(data) ?: return false
+                val isWorkoutStart = state.isRunning &&
+                    (previousState?.isIdle == true || (previousState == null && state.elapsedSeconds == 0))
+                val isWorkoutResume = state.isRunning && previousState?.isPaused == true
+                isWorkoutStart ||
+                    isWorkoutResume ||
+                    state.isBailoutActive ||
+                    state.isCadenceFloorActive ||
+                    state.isPaused ||
+                    state.isCompleted
             }
             else -> false
         }
@@ -59,6 +70,12 @@ class WearMessageListenerService : WearableListenerService() {
         super.onMessageReceived(messageEvent)
 
         val app = application as? WearBikeApplication
+        val previousState = app?.messageManager?.workoutState?.value
+
+        // Maintain live link to phone so watch can reply with HR telemetry and gestures
+        if (messageEvent.sourceNodeId.isNotBlank()) {
+            app?.messageManager?.updatePhoneNode(messageEvent.sourceNodeId)
+        }
 
         // 1. Play haptics directly even if MainActivity is not in foreground
         if (messageEvent.path == WearableProtocol.PATH_HAPTIC_TRIGGER) {
@@ -84,7 +101,7 @@ class WearMessageListenerService : WearableListenerService() {
         }
 
         // 4. Wake UI only for attention-requiring events
-        val shouldWake = shouldWakeForMessage(messageEvent.path, messageEvent.data)
+        val shouldWake = shouldWakeForMessage(messageEvent.path, messageEvent.data, previousState)
         if (!shouldWake) return
 
         Log.d(TAG, "Waking watch UI for path: ${messageEvent.path}")
@@ -97,5 +114,26 @@ class WearMessageListenerService : WearableListenerService() {
         } catch (e: Exception) {
             Log.w(TAG, "Failed to start MainActivity from listener: ${e.message}")
         }
+    }
+
+    override fun onPeerConnected(peer: Node) {
+        super.onPeerConnected(peer)
+        Log.d(TAG, "onPeerConnected: ${peer.displayName} (${peer.id})")
+        val app = application as? WearBikeApplication
+        app?.messageManager?.updatePhoneNode(peer.id, peer.displayName)
+    }
+
+    override fun onPeerDisconnected(peer: Node) {
+        super.onPeerDisconnected(peer)
+        Log.d(TAG, "onPeerDisconnected: ${peer.displayName} (${peer.id})")
+        val app = application as? WearBikeApplication
+        app?.messageManager?.refreshConnectedPhone()
+    }
+
+    override fun onCapabilityChanged(capabilityInfo: CapabilityInfo) {
+        super.onCapabilityChanged(capabilityInfo)
+        Log.d(TAG, "onCapabilityChanged: ${capabilityInfo.name}")
+        val app = application as? WearBikeApplication
+        app?.messageManager?.refreshConnectedPhone()
     }
 }

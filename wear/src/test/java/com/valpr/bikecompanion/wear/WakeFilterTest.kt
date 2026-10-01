@@ -36,6 +36,101 @@ class WakeFilterTest {
     }
 
     @Test
+    fun workoutStart_zeroElapsed_wakes() {
+        val startMessage = WorkoutStateMessage(
+            sessionStatus = WorkoutStateMessage.STATUS_RUNNING,
+            elapsedSeconds = 0,
+            targetWatts = 200,
+            currentWatts = 0,
+            cadenceRpm = 0,
+            heartRateBpm = 0,
+            isBailoutActive = false,
+            isCadenceFloorActive = false,
+            isHrCapped = false,
+            workoutName = "New Ride"
+        ).toByteArray()
+
+        assertTrue(
+            WearMessageListenerService.shouldWakeForMessage(
+                WearableProtocol.PATH_WORKOUT_STATE,
+                startMessage
+            )
+        )
+    }
+
+    @Test
+    fun workoutStart_fromIdleState_wakes() {
+        val idleState = WorkoutStateMessage(
+            sessionStatus = WorkoutStateMessage.STATUS_IDLE,
+            elapsedSeconds = 0,
+            targetWatts = -1,
+            currentWatts = 0,
+            cadenceRpm = 0,
+            heartRateBpm = 0,
+            isBailoutActive = false,
+            isCadenceFloorActive = false,
+            isHrCapped = false,
+            workoutName = ""
+        )
+
+        assertTrue(
+            WearMessageListenerService.shouldWakeForMessage(
+                WearableProtocol.PATH_WORKOUT_STATE,
+                state(),
+                previousState = idleState
+            )
+        )
+    }
+
+    @Test
+    fun workoutResume_fromPaused_wakes() {
+        val pausedState = WorkoutStateMessage(
+            sessionStatus = WorkoutStateMessage.STATUS_PAUSED,
+            elapsedSeconds = 60,
+            targetWatts = 200,
+            currentWatts = 0,
+            cadenceRpm = 0,
+            heartRateBpm = 130,
+            isBailoutActive = false,
+            isCadenceFloorActive = false,
+            isHrCapped = false,
+            workoutName = "Test"
+        )
+
+        assertTrue(
+            WearMessageListenerService.shouldWakeForMessage(
+                WearableProtocol.PATH_WORKOUT_STATE,
+                state(),
+                previousState = pausedState
+            )
+        )
+    }
+
+    @Test
+    fun steadyRunningTelemetry_withRunningPreviousState_doesNotWake() {
+        val runningState = WorkoutStateMessage(
+            sessionStatus = WorkoutStateMessage.STATUS_RUNNING,
+            elapsedSeconds = 58,
+            targetWatts = 200,
+            currentWatts = 195,
+            cadenceRpm = 85,
+            heartRateBpm = 140,
+            isBailoutActive = false,
+            isCadenceFloorActive = false,
+            isHrCapped = false,
+            workoutName = "Test"
+        )
+
+        assertFalse(
+            WearMessageListenerService.shouldWakeForMessage(
+                WearableProtocol.PATH_WORKOUT_STATE,
+                state(),
+                previousState = runningState
+            )
+        )
+    }
+
+    @Test
     fun bailoutFloorPausedCompleted_wake() {
         assertTrue(
             WearMessageListenerService.shouldWakeForMessage(

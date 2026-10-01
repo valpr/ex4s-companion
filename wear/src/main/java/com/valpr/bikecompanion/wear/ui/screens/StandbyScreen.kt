@@ -1,6 +1,7 @@
 package com.valpr.bikecompanion.wear.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,11 +30,17 @@ import androidx.wear.compose.material.Text
  * Prevents accidental workout starts from the watch.
  */
 @Composable
-fun StandbyScreen(isPhoneConnected: Boolean, currentHeartRate: Int, modifier: Modifier = Modifier) {
+fun StandbyScreen(
+    isPhoneConnected: Boolean,
+    currentHeartRate: Int,
+    modifier: Modifier = Modifier,
+    onSyncRequested: () -> Unit = {}
+) {
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(Color.Black)
+            .clickable { onSyncRequested() },
         contentAlignment = Alignment.Center
     ) {
         Column(

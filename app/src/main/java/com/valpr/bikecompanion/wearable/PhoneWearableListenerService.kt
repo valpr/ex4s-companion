@@ -3,6 +3,7 @@ package com.valpr.bikecompanion.wearable
 import android.util.Log
 import com.google.android.gms.wearable.CapabilityInfo
 import com.google.android.gms.wearable.MessageEvent
+import com.google.android.gms.wearable.Node
 import com.google.android.gms.wearable.WearableListenerService
 import com.valpr.bikecompanion.BikeApplication
 
@@ -27,5 +28,19 @@ class PhoneWearableListenerService : WearableListenerService() {
         super.onCapabilityChanged(capabilityInfo)
         val app = application as? BikeApplication ?: return
         app.phoneWearableManager.onCapabilityChanged(capabilityInfo)
+    }
+
+    override fun onPeerConnected(peer: Node) {
+        super.onPeerConnected(peer)
+        Log.d(TAG, "WearableListenerService onPeerConnected: ${peer.displayName} (${peer.id})")
+        val app = application as? BikeApplication ?: return
+        app.phoneWearableManager.onPeerConnected(peer)
+    }
+
+    override fun onPeerDisconnected(peer: Node) {
+        super.onPeerDisconnected(peer)
+        Log.d(TAG, "WearableListenerService onPeerDisconnected: ${peer.displayName} (${peer.id})")
+        val app = application as? BikeApplication ?: return
+        app.phoneWearableManager.onPeerDisconnected(peer)
     }
 }

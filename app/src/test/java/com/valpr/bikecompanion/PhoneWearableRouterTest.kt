@@ -46,6 +46,10 @@ class PhoneWearableRouterTest {
             PhoneWearableRouter.route(WearableProtocol.PATH_RESUME_SLAP, byteArrayOf(0x01))
         )
         assertEquals(
+            PhoneWearableRouter.Action.RequestWorkoutState,
+            PhoneWearableRouter.route(WearableProtocol.PATH_REQUEST_STATE, byteArrayOf(0x01))
+        )
+        assertEquals(
             PhoneWearableRouter.Action.Ignore,
             PhoneWearableRouter.route("/unknown", byteArrayOf(0x01))
         )

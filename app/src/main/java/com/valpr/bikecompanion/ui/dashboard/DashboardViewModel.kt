@@ -49,6 +49,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         loadWorkouts()
+        refreshWatchConnection()
+    }
+
+    fun refreshWatchConnection() {
+        phoneWearableManager.refreshConnectedNodes()
     }
 
     fun loadWorkouts() {

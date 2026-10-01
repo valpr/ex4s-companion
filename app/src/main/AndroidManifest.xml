@@ -67,10 +67,16 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
-                <action android:name="com.google.android.gms.wearable.CAPABILITY_CHANGED" />
                 <data
                     android:host="*"
                     android:scheme="wear" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.CAPABILITY_CHANGED" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.PEER_CONNECTED" />
+                <action android:name="com.google.android.gms.wearable.PEER_DISCONNECTED" />
             </intent-filter>
         </service>
 
