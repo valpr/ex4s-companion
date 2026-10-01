@@ -73,6 +73,66 @@ class WorkoutSessionManagerTest {
     }
 
     @Test
+    fun pauseResume_pedalingDuringPauseExcludedFromSummaryDistance() = runTest {
+        telemetryFlow.value = BikeTelemetry(cadenceRpm = 85, estimatedWatts = 150, resistanceLevel = 10, distanceKm = 1.0)
+        val manager = createManager()
+        settleManager()
+        manager.startWorkout(null)
+        managerTime(2000L)
+
+        // Ride to 3.0 km, then pause.
+        telemetryFlow.value = telemetryFlow.value.copy(distanceKm = 3.0)
+        managerTime(1100L)
+        manager.pauseWorkout()
+        assertEquals(SessionStatus.PAUSED, manager.sessionState.value.status)
+
+        // Pedal 1.5 km while paused (odometer keeps counting, no samples).
+        telemetryFlow.value = telemetryFlow.value.copy(distanceKm = 4.5)
+        managerTime(3000L)
+        assertEquals(SessionStatus.PAUSED, manager.sessionState.value.status)
+
+        // Resume and ride 0.5 km more, then stop.
+        manager.resumeWorkout()
+        telemetryFlow.value = telemetryFlow.value.copy(distanceKm = 5.0)
+        managerTime(1100L)
+        manager.stopWorkout()
+
+        val summary = manager.sessionState.value.summary
+        assertNotNull(summary)
+        // 5.0 final - 1.5 paused drift = 3.5 km counted.
+        assertEquals(3.5, summary!!.totalDistanceKm, 0.0001)
+    }
+
+    @Test
+    fun pauseResume_cyclesAccumulate_noPauseLeavesDistanceIntact() = runTest {
+        telemetryFlow.value = BikeTelemetry(distanceKm = 0.0)
+        val manager = createManager()
+        settleManager()
+        manager.startWorkout(null)
+        managerTime(1100L)
+
+        // Two pause cycles with 1.0 km drift each.
+        telemetryFlow.value = telemetryFlow.value.copy(distanceKm = 2.0)
+        managerTime(1100L)
+        manager.pauseWorkout()
+        telemetryFlow.value = telemetryFlow.value.copy(distanceKm = 3.0)
+        managerTime(1100L)
+        manager.resumeWorkout()
+        telemetryFlow.value = telemetryFlow.value.copy(distanceKm = 4.0)
+        managerTime(1100L)
+        manager.pauseWorkout()
+        telemetryFlow.value = telemetryFlow.value.copy(distanceKm = 5.0)
+        managerTime(1100L)
+        manager.resumeWorkout()
+        telemetryFlow.value = telemetryFlow.value.copy(distanceKm = 6.0)
+        managerTime(1100L)
+        manager.stopWorkout()
+
+        // 6.0 final - 2.0 paused drift = 4.0 km counted.
+        assertEquals(4.0, manager.sessionState.value.summary!!.totalDistanceKm, 0.0001)
+    }
+
+    @Test
     fun startWorkout_initializesSessionRunning() = runTest {
         val manager = createManager()
         settleManager()

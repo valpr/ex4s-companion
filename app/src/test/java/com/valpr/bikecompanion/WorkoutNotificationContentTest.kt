@@ -137,17 +137,24 @@ class WorkoutNotificationContentTest {
     }
 
     @Test
-    fun timeSelection_runningUsesSessionClock_otherwiseTelemetryClock() {
+    fun timeSelection_sessionClockWheneverSessionExists_telemetryOnlyWhenIdle() {
         // RUNNING -> session.elapsedSeconds (125s = 02:05)
         assertEquals(
             "02:05",
             WorkoutNotificationContent.selectedTime(session(SessionStatus.RUNNING, elapsed = 125, telemElapsed = 10))
         )
-        // PAUSED/IDLE -> telemetry clock (61s = 01:01)
+        // PAUSED/COMPLETED -> frozen session clock, not the ticking bike clock
         assertEquals(
-            "01:01",
+            "02:05",
             WorkoutNotificationContent.selectedTime(session(SessionStatus.PAUSED, elapsed = 125, telemElapsed = 61))
         )
+        assertEquals(
+            "02:05",
+            WorkoutNotificationContent.selectedTime(
+                session(SessionStatus.COMPLETED, elapsed = 125, telemElapsed = 61)
+            )
+        )
+        // IDLE (no session) -> telemetry clock (61s = 01:01)
         assertEquals(
             "01:01",
             WorkoutNotificationContent.selectedTime(session(telemElapsed = 61))
@@ -173,13 +180,14 @@ class WorkoutNotificationContentTest {
         val bailout =
             session(
                 SessionStatus.PAUSED,
+                elapsed = 45,
                 telemElapsed = 30,
                 cadence = 40,
                 resistance = 8,
                 ergState = ErgState.CADENCE_FLOOR_BAILOUT
             )
         assertEquals(
-            "Cadence: 40 RPM • L8 • Time: 00:30 • BAILOUT (Spin >75)",
+            "Cadence: 40 RPM • L8 • Time: 00:45 • BAILOUT (Spin >75)",
             WorkoutNotificationContent.buildContent(bailout)
         )
     }

@@ -43,10 +43,15 @@ object WorkoutNotificationContent {
         else -> ""
     }
 
-    fun selectedTime(session: WorkoutSessionState): String = if (session.status == SessionStatus.RUNNING) {
-        session.formattedElapsedTime
-    } else {
+    /**
+     * Session clock wins whenever a session exists (RUNNING/PAUSED/COMPLETED
+     * all freeze or advance it deliberately). The bike telemetry clock is only
+     * a fallback for IDLE, where no session time exists.
+     */
+    fun selectedTime(session: WorkoutSessionState): String = if (session.status == SessionStatus.IDLE) {
         session.latestTelemetry.formattedElapsedTime
+    } else {
+        session.formattedElapsedTime
     }
 
     fun buildContent(session: WorkoutSessionState): String {

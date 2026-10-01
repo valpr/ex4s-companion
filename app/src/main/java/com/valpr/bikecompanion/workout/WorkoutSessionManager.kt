@@ -136,6 +136,8 @@ class WorkoutSessionManager(
     private var athleteCriticalHr: Int = 175
     private var athletePreferredCadence: Int = 85
     private var sessionStartEpochMs: Long = 0L
+    private var pauseOdometerSnapshotKm: Double = 0.0
+    private var pausedDistanceKm: Double = 0.0
 
     /** Whether a structured (FTP-based) workout may start. Free Ride (`null`) is always allowed. */
     val isFtpConfigured: Boolean
@@ -221,6 +223,8 @@ class WorkoutSessionManager(
         recordedSamples.clear()
         ergController.reset()
         sessionStartEpochMs = System.currentTimeMillis()
+        pauseOdometerSnapshotKm = 0.0
+        pausedDistanceKm = 0.0
 
         val totalDuration = workout?.totalDurationSeconds ?: 0
 
@@ -255,12 +259,20 @@ class WorkoutSessionManager(
 
     fun pauseWorkout() {
         if (_sessionState.value.status == SessionStatus.RUNNING) {
+            // Snapshot the bike odometer so pedaling during the pause can be
+            // excluded from the summary distance (elapsed/samples already freeze).
+            pauseOdometerSnapshotKm = _sessionState.value.latestTelemetry.distanceKm
             _sessionState.update { it.copy(status = SessionStatus.PAUSED) }
         }
     }
 
     fun resumeWorkout() {
         if (_sessionState.value.status == SessionStatus.PAUSED) {
+            // Accumulate odometer drift while paused; multiple pause/resume
+            // cycles sum. Negative drift (odometer reset) is ignored.
+            pausedDistanceKm +=
+                (_sessionState.value.latestTelemetry.distanceKm - pauseOdometerSnapshotKm)
+                    .coerceAtLeast(0.0)
             _sessionState.update { it.copy(status = SessionStatus.RUNNING) }
         }
     }
@@ -341,6 +353,8 @@ class WorkoutSessionManager(
 
     fun resetToIdle() {
         stopSessionLoop()
+        pauseOdometerSnapshotKm = 0.0
+        pausedDistanceKm = 0.0
         _sessionState.update {
             WorkoutSessionState(
                 latestTelemetry = it.latestTelemetry,
@@ -434,7 +448,9 @@ class WorkoutSessionManager(
         val samples = recordedSamples.toList()
         val duration = state.elapsedSeconds
         val workoutName = state.workout?.name ?: "Free Ride"
-        val distance = state.latestTelemetry.distanceKm
+        // Odometer keeps counting while paused; subtract the accumulated
+        // paused drift so distance matches the recorded duration/samples.
+        val distance = (state.latestTelemetry.distanceKm - pausedDistanceKm).coerceAtLeast(0.0)
 
         val avgWatts = if (samples.isNotEmpty()) samples.map { it.watts }.average().roundToInt() else 0
         val maxWatts = samples.maxOfOrNull { it.watts } ?: 0
