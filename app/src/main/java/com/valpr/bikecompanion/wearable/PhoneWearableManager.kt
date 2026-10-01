@@ -10,15 +10,18 @@ import com.google.android.gms.wearable.Node
 import com.google.android.gms.wearable.NodeClient
 import com.google.android.gms.wearable.Wearable
 import com.valpr.bikecompanion.engine.ErgState
+import com.valpr.bikecompanion.shared.PingPongMessage
 import com.valpr.bikecompanion.shared.WearableProtocol
 import com.valpr.bikecompanion.shared.WorkoutStateMessage
 import com.valpr.bikecompanion.workout.SessionStatus
 import com.valpr.bikecompanion.workout.WorkoutSessionManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,11 +37,15 @@ import kotlinx.coroutines.launch
  */
 data class WearableWatchState(
     val isConnected: Boolean = false,
+    val isAppInstalled: Boolean = true,
     val nodeName: String = "",
     val nodeId: String = "",
     val lastHeartRateBpm: Int = 0,
     /** Phone receipt time (see [PhoneWearableManager.clock]) of the last HR batch. */
-    val lastHeartRateTimestampMs: Long = 0L
+    val lastHeartRateTimestampMs: Long = 0L,
+    val isPinging: Boolean = false,
+    val lastPingRoundTripMs: Long? = null,
+    val pingStatusMessage: String? = null
 )
 
 /**
@@ -77,6 +84,8 @@ class PhoneWearableManager(
     companion object {
         private const val TAG = "PhoneWearableManager"
         private const val NODE_REFRESH_INTERVAL_MS = 15_000L
+        const val PING_TIMEOUT_MS = 2500L
+        private const val CLUTCH_DEBOUNCE_MS = 500L
 
         /**
          * HR is LIVE while a batch arrived within this window. Grounded in the
@@ -118,7 +127,11 @@ class PhoneWearableManager(
 
     private var stateSyncJob: Job? = null
     private var hapticJob: Job? = null
+    private var pingTimeoutJob: Job? = null
+    private var pingClearJob: Job? = null
     private var lastNodeRefreshMs = 0L
+    private var lastHandledPingTimestamp = 0L
+    private var lastClutchMs = 0L
 
     init {
         try {
@@ -136,19 +149,21 @@ class PhoneWearableManager(
     /**
      * Updates active watch node state, auto-syncing current workout if newly connected.
      */
-    fun updateWatchNode(node: Node) {
+    fun updateWatchNode(node: Node, isAppInstalled: Boolean = true) {
         val wasConnected = _watchState.value.isConnected
         val prevNodeId = _watchState.value.nodeId
         _watchState.update {
             it.copy(
                 isConnected = true,
+                isAppInstalled = isAppInstalled,
                 nodeName = node.displayName.ifBlank { "Pixel Watch" },
                 nodeId = node.id
             )
         }
-        Log.d(TAG, "Watch node updated: ${node.displayName} (${node.id})")
+        Log.d(TAG, "Watch node updated: ${node.displayName} (${node.id}), isAppInstalled=$isAppInstalled")
         if ((!wasConnected || prevNodeId != node.id) &&
-            sessionManager.sessionState.value.status != SessionStatus.IDLE
+            sessionManager.sessionState.value.status != SessionStatus.IDLE &&
+            isAppInstalled
         ) {
             sendCurrentWorkoutState(node.id)
         }
@@ -169,7 +184,7 @@ class PhoneWearableManager(
                 )
                 val reachableNode = capabilityInfo.nodes.firstOrNull()
                 if (reachableNode != null) {
-                    updateWatchNode(reachableNode)
+                    updateWatchNode(reachableNode, isAppInstalled = true)
                     return@launch
                 }
             } catch (e: Exception) {
@@ -181,11 +196,12 @@ class PhoneWearableManager(
                 val primaryNode = nodes.firstOrNull()
 
                 if (primaryNode != null) {
-                    updateWatchNode(primaryNode)
+                    updateWatchNode(primaryNode, isAppInstalled = false)
                 } else {
                     _watchState.update {
                         it.copy(
                             isConnected = false,
+                            isAppInstalled = false,
                             nodeName = "",
                             nodeId = ""
                         )
@@ -213,13 +229,12 @@ class PhoneWearableManager(
 
     override fun onMessageReceived(messageEvent: MessageEvent) {
         val sourceNodeId = messageEvent.sourceNodeId
-        if (sourceNodeId.isNotBlank() &&
-            (!_watchState.value.isConnected || _watchState.value.nodeId.isBlank())
-        ) {
+        if (sourceNodeId.isNotBlank()) {
             _watchState.update {
                 it.copy(
                     isConnected = true,
-                    nodeId = sourceNodeId,
+                    isAppInstalled = true,
+                    nodeId = if (it.nodeId.isBlank()) sourceNodeId else it.nodeId,
                     nodeName = it.nodeName.ifBlank { "Pixel Watch" }
                 )
             }
@@ -240,6 +255,12 @@ class PhoneWearableManager(
             }
 
             PhoneWearableRouter.Action.Clutch -> {
+                val now = clock()
+                if (now - lastClutchMs < CLUTCH_DEBOUNCE_MS) {
+                    Log.d(TAG, "Ignoring duplicate Clutch command within debounce window")
+                    return
+                }
+                lastClutchMs = now
                 Log.i(TAG, "Received Rotary Crown Bailout command from watch")
                 sessionManager.toggleClutch()
             }
@@ -265,6 +286,62 @@ class PhoneWearableManager(
                 sendCurrentWorkoutState(sourceNodeId.ifBlank { null })
             }
 
+            is PhoneWearableRouter.Action.Pong -> {
+                val rtt = (clock() - action.timestampMs).coerceAtLeast(0L)
+                Log.i(TAG, "Received Pong from watch, RTT=${rtt}ms")
+                if (!_watchState.value.isPinging || rtt > PING_TIMEOUT_MS) {
+                    Log.d(TAG, "Ignoring delayed or unprompted Pong (RTT=${rtt}ms, isPinging=${_watchState.value.isPinging})")
+                    _watchState.update { it.copy(isConnected = true, isAppInstalled = true) }
+                    return
+                }
+                pingTimeoutJob?.cancel()
+                _watchState.update {
+                    it.copy(
+                        isConnected = true,
+                        isAppInstalled = true,
+                        isPinging = false,
+                        lastPingRoundTripMs = rtt,
+                        pingStatusMessage = "Verified (${rtt}ms)"
+                    )
+                }
+                schedulePingStatusClear()
+            }
+
+            is PhoneWearableRouter.Action.Ping -> {
+                if (action.timestampMs == lastHandledPingTimestamp) {
+                    Log.d(TAG, "Duplicate Ping ignored: ${action.timestampMs}")
+                    return
+                }
+                lastHandledPingTimestamp = action.timestampMs
+                Log.i(TAG, "Received Ping from watch, replying with Pong")
+                _watchState.update {
+                    it.copy(
+                        isConnected = true,
+                        isAppInstalled = true,
+                        lastPingRoundTripMs = null,
+                        pingStatusMessage = "Watch Connected • Verified"
+                    )
+                }
+                schedulePingStatusClear()
+                val target = sourceNodeId.ifBlank { _watchState.value.nodeId }
+                if (target.isNotBlank()) {
+                    scope.launch {
+                        try {
+                            val pongMsg = PingPongMessage(action.timestampMs)
+                            Tasks.await(
+                                messageClient.sendMessage(
+                                    target,
+                                    WearableProtocol.PATH_PONG,
+                                    pongMsg.toByteArray()
+                                )
+                            )
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to reply with Pong: ${e.message}")
+                        }
+                    }
+                }
+            }
+
             PhoneWearableRouter.Action.Ignore -> {
                 Log.d(TAG, "Received unhandled wearable message: ${messageEvent.path}")
             }
@@ -274,9 +351,89 @@ class PhoneWearableManager(
     override fun onCapabilityChanged(capabilityInfo: com.google.android.gms.wearable.CapabilityInfo) {
         val reachableNode = capabilityInfo.nodes.firstOrNull()
         if (reachableNode != null) {
-            updateWatchNode(reachableNode)
+            updateWatchNode(reachableNode, isAppInstalled = true)
         } else {
             refreshConnectedNodes()
+        }
+    }
+
+    /**
+     * Sends an active test ping to the watch to measure RTT latency and verify two-way connectivity.
+     */
+    fun sendPing() {
+        if (_watchState.value.isPinging) {
+            Log.d(TAG, "Ping already in flight, ignoring duplicate request")
+            return
+        }
+
+        val targetNodeId = _watchState.value.nodeId
+        if (targetNodeId.isBlank()) {
+            _watchState.update {
+                it.copy(
+                    isPinging = false,
+                    pingStatusMessage = "No watch connected"
+                )
+            }
+            schedulePingStatusClear()
+            refreshConnectedNodes()
+            return
+        }
+
+        val now = clock()
+        _watchState.update {
+            it.copy(
+                isPinging = true,
+                lastPingRoundTripMs = null,
+                pingStatusMessage = "Pinging watch…"
+            )
+        }
+
+        pingClearJob?.cancel()
+        pingTimeoutJob?.cancel()
+        pingTimeoutJob = scope.launch {
+            try {
+                val pingMsg = PingPongMessage(timestampMs = now)
+                Tasks.await(
+                    messageClient.sendMessage(
+                        targetNodeId,
+                        WearableProtocol.PATH_PING,
+                        pingMsg.toByteArray()
+                    )
+                )
+                // Timeout after 2500ms if no pong received
+                delay(PING_TIMEOUT_MS)
+                _watchState.update {
+                    if (it.isPinging) {
+                        it.copy(
+                            isPinging = false,
+                            pingStatusMessage = if (!it.isAppInstalled) "Watch App Not Found" else "Ping timed out"
+                        )
+                    } else {
+                        it
+                    }
+                }
+                schedulePingStatusClear()
+            } catch (e: CancellationException) {
+                // Cancelled cleanly when Pong was received or on onDestroy; rethrow
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to send ping: ${e.message}")
+                _watchState.update {
+                    it.copy(
+                        isPinging = false,
+                        pingStatusMessage = "Ping failed: ${e.message}"
+                    )
+                }
+                schedulePingStatusClear()
+            }
+        }
+    }
+
+    private fun schedulePingStatusClear(delayMs: Long = 4000L) {
+        pingClearJob?.cancel()
+        pingClearJob = scope.launch {
+            delay(delayMs)
+            _watchState.update { it.copy(pingStatusMessage = null) }
         }
     }
 
@@ -450,6 +607,8 @@ class PhoneWearableManager(
         } catch (e: Exception) {
             Log.w(TAG, "Error removing wearable listeners: ${e.message}")
         }
+        pingClearJob?.cancel()
+        pingTimeoutJob?.cancel()
         stateSyncJob?.cancel()
         hapticJob?.cancel()
         scope.cancel()

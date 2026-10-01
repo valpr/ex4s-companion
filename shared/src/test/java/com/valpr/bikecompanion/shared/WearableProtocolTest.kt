@@ -258,4 +258,19 @@ class WearableProtocolTest {
         assertNull(HapticAlertType.fromByteArray(byteArrayOf()))
         assertNull(HapticAlertType.fromByteArray(byteArrayOf(0x7F)))
     }
+
+    @Test
+    fun testPingPongMessageSerialization() {
+        val timestamp = 1711600123456L
+        val original = PingPongMessage(timestamp)
+        val bytes = original.toByteArray()
+        val decoded = PingPongMessage.fromByteArray(bytes)
+
+        assertNotNull(decoded)
+        assertEquals(timestamp, decoded!!.timestampMs)
+
+        assertNull(PingPongMessage.fromByteArray(byteArrayOf()))
+        assertNull(PingPongMessage.fromByteArray(byteArrayOf(0x00, 0x01, 0x02)))
+        assertNull(PingPongMessage.fromByteArray(byteArrayOf(0x51, 0, 0, 0, 0, 0, 0, 0, 1))) // wrong magic
+    }
 }

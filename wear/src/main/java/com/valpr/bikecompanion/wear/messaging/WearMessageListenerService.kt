@@ -91,6 +91,15 @@ class WearMessageListenerService : WearableListenerService() {
         val app = application as? WearBikeApplication
         val previousState = app?.messageManager?.workoutState?.value
 
+        // 0. Forward ping-pong test messages to WearMessageManager and return early
+        if (messageEvent.path == WearableProtocol.PATH_PING || messageEvent.path == WearableProtocol.PATH_PONG) {
+            if (messageEvent.sourceNodeId.isNotBlank()) {
+                app?.messageManager?.updatePhoneNode(messageEvent.sourceNodeId)
+            }
+            app?.messageManager?.onMessageReceived(messageEvent)
+            return
+        }
+
         // Maintain live link to phone so watch can reply with HR telemetry and gestures
         if (messageEvent.sourceNodeId.isNotBlank()) {
             app?.messageManager?.updatePhoneNode(messageEvent.sourceNodeId)

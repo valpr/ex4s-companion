@@ -12,13 +12,16 @@ import com.google.android.gms.wearable.NodeClient
 import com.google.android.gms.wearable.Wearable
 import com.valpr.bikecompanion.shared.HapticAlertType
 import com.valpr.bikecompanion.shared.HeartRateBatch
+import com.valpr.bikecompanion.shared.PingPongMessage
 import com.valpr.bikecompanion.shared.WearableProtocol
 import com.valpr.bikecompanion.shared.WorkoutStateMessage
 import com.valpr.bikecompanion.wear.haptics.WatchHapticManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -58,12 +61,22 @@ class WearMessageManager(
     private val _isPhoneConnected = MutableStateFlow(false)
     val isPhoneConnected: StateFlow<Boolean> = _isPhoneConnected.asStateFlow()
 
+    private val _isPhoneAppReachable = MutableStateFlow(false)
+    val isPhoneAppReachable: StateFlow<Boolean> = _isPhoneAppReachable.asStateFlow()
+
+    private val _pingFeedbackMessage = MutableStateFlow<String?>(null)
+    val pingFeedbackMessage: StateFlow<String?> = _pingFeedbackMessage.asStateFlow()
+
     private val _phoneNodeId = MutableStateFlow<String?>(null)
+    val phoneNodeId: StateFlow<String?> = _phoneNodeId.asStateFlow()
 
     private val _workoutState = MutableStateFlow<WorkoutStateMessage?>(null)
     val workoutState: StateFlow<WorkoutStateMessage?> = _workoutState.asStateFlow()
 
     private var lastRequestStateMs = 0L
+    private var lastHandledPingTimestamp = 0L
+    private var feedbackClearJob: Job? = null
+    private var pingJob: Job? = null
 
     init {
         try {
@@ -78,15 +91,64 @@ class WearMessageManager(
     /**
      * Updates paired phone node ID and triggers workout state query if needed.
      */
-    fun updatePhoneNode(nodeId: String, displayName: String = "Phone") {
+    fun updatePhoneNode(nodeId: String, displayName: String = "Phone", isAppReachable: Boolean = true) {
         if (nodeId.isNotBlank()) {
             val wasConnected = _isPhoneConnected.value
             val prevNodeId = _phoneNodeId.value
             _phoneNodeId.value = nodeId
             _isPhoneConnected.value = true
-            Log.d(TAG, "Phone node updated: $displayName ($nodeId)")
-            if (!wasConnected || prevNodeId != nodeId || _workoutState.value == null) {
+            _isPhoneAppReachable.value = isAppReachable
+            Log.d(TAG, "Phone node updated: $displayName ($nodeId), isAppReachable=$isAppReachable")
+            if ((!wasConnected || prevNodeId != nodeId) && isAppReachable) {
                 requestWorkoutState()
+            }
+        }
+    }
+
+    private fun clearPingFeedbackAfterDelay(delayMs: Long = 3000L) {
+        feedbackClearJob?.cancel()
+        feedbackClearJob = scope.launch {
+            delay(delayMs)
+            _pingFeedbackMessage.value = null
+        }
+    }
+
+    /**
+     * Tapping on standby screen triggers a manual sync & ping test to phone.
+     */
+    fun triggerManualSync() {
+        if (_pingFeedbackMessage.value == "SYNCING…") {
+            Log.d(TAG, "Manual sync already in progress, ignoring duplicate tap")
+            return
+        }
+        _pingFeedbackMessage.value = "SYNCING…"
+        requestWorkoutState()
+        val target = _phoneNodeId.value
+        if (WearMessageRouter.canSend(target)) {
+            val nodeId = target!!
+            pingJob?.cancel()
+            pingJob = scope.launch {
+                try {
+                    val ping = PingPongMessage(clock())
+                    Tasks.await(
+                        messageClient.sendMessage(
+                            nodeId,
+                            WearableProtocol.PATH_PING,
+                            ping.toByteArray()
+                        )
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to send manual ping: ${e.message}")
+                }
+            }
+        }
+        feedbackClearJob?.cancel()
+        feedbackClearJob = scope.launch {
+            delay(2500L)
+            if (_pingFeedbackMessage.value == "SYNCING…") {
+                _pingFeedbackMessage.value = if (!_isPhoneAppReachable.value) "PHONE APP NOT FOUND" else "NO RESPONSE"
+                delay(2000L)
+                _pingFeedbackMessage.value = null
             }
         }
     }
@@ -129,7 +191,7 @@ class WearMessageManager(
                 )
                 val reachablePhone = capabilityInfo.nodes.firstOrNull()
                 if (reachablePhone != null) {
-                    updatePhoneNode(reachablePhone.id, reachablePhone.displayName)
+                    updatePhoneNode(reachablePhone.id, reachablePhone.displayName, isAppReachable = true)
                     return@launch
                 }
             } catch (e: Exception) {
@@ -140,10 +202,11 @@ class WearMessageManager(
                 val nodes: List<Node> = Tasks.await(nodeClient.connectedNodes)
                 val phone = nodes.firstOrNull()
                 if (phone != null) {
-                    updatePhoneNode(phone.id, phone.displayName)
+                    updatePhoneNode(phone.id, phone.displayName, isAppReachable = false)
                 } else {
                     _phoneNodeId.value = null
                     _isPhoneConnected.value = false
+                    _isPhoneAppReachable.value = false
                     Log.d(TAG, "No connected phone node found.")
                 }
             } catch (e: Exception) {
@@ -153,19 +216,63 @@ class WearMessageManager(
     }
 
     override fun onMessageReceived(messageEvent: MessageEvent) {
-        if (messageEvent.sourceNodeId.isNotBlank() &&
-            (!_isPhoneConnected.value || _phoneNodeId.value.isNullOrBlank())
-        ) {
-            updatePhoneNode(messageEvent.sourceNodeId)
+        val sourceNodeId = messageEvent.sourceNodeId
+        if (sourceNodeId.isNotBlank()) {
+            updatePhoneNode(sourceNodeId, isAppReachable = true)
         }
 
         when (val action = WearMessageRouter.route(messageEvent.path, messageEvent.data)) {
             is WearMessageRouter.Action.UpdateState -> {
+                if (_pingFeedbackMessage.value == "SYNCING…") {
+                    _pingFeedbackMessage.value = "CONNECTED TO PHONE"
+                    hapticManager.playAlert(HapticAlertType.RESUME_TRIGGERED)
+                    clearPingFeedbackAfterDelay()
+                }
                 updateWorkoutState(action.state)
             }
             is WearMessageRouter.Action.PlayHaptic -> {
                 Log.i(TAG, "Received haptic trigger from phone: ${action.alert}")
                 hapticManager.playAlert(action.alert)
+            }
+            is WearMessageRouter.Action.Ping -> {
+                if (action.timestampMs == lastHandledPingTimestamp) {
+                    Log.d(TAG, "Duplicate Ping ignored: ${action.timestampMs}")
+                    return
+                }
+                lastHandledPingTimestamp = action.timestampMs
+                Log.i(TAG, "Received Ping from phone, replying with Pong")
+                hapticManager.playAlert(HapticAlertType.RESUME_TRIGGERED)
+                _pingFeedbackMessage.value = "PHONE PING RECEIVED"
+                clearPingFeedbackAfterDelay()
+                val target = _phoneNodeId.value?.ifBlank { null } ?: sourceNodeId
+                if (target.isNotBlank()) {
+                    scope.launch {
+                        try {
+                            val pong = PingPongMessage(action.timestampMs)
+                            Tasks.await(
+                                messageClient.sendMessage(
+                                    target,
+                                    WearableProtocol.PATH_PONG,
+                                    pong.toByteArray()
+                                )
+                            )
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to reply with Pong: ${e.message}")
+                        }
+                    }
+                }
+            }
+            is WearMessageRouter.Action.Pong -> {
+                val rtt = (clock() - action.timestampMs).coerceAtLeast(0L)
+                Log.i(TAG, "Received Pong from phone, RTT=${rtt}ms")
+                if (rtt > 2500L) {
+                    Log.d(TAG, "Ignoring delayed Pong (RTT=${rtt}ms)")
+                    return
+                }
+                feedbackClearJob?.cancel()
+                hapticManager.playAlert(HapticAlertType.RESUME_TRIGGERED)
+                _pingFeedbackMessage.value = "CONNECTED TO PHONE"
+                clearPingFeedbackAfterDelay()
             }
             WearMessageRouter.Action.Ignore -> {
                 Log.d(TAG, "Unhandled message path: ${messageEvent.path}")
@@ -176,7 +283,7 @@ class WearMessageManager(
     override fun onCapabilityChanged(capabilityInfo: CapabilityInfo) {
         val reachablePhone = capabilityInfo.nodes.firstOrNull()
         if (reachablePhone != null) {
-            updatePhoneNode(reachablePhone.id, reachablePhone.displayName)
+            updatePhoneNode(reachablePhone.id, reachablePhone.displayName, isAppReachable = true)
         } else {
             refreshConnectedPhone()
         }
@@ -301,6 +408,8 @@ class WearMessageManager(
         } catch (e: Exception) {
             Log.w(TAG, "Error unregistering Wearable listeners: ${e.message}")
         }
+        feedbackClearJob?.cancel()
+        pingJob?.cancel()
         scope.cancel()
     }
 }

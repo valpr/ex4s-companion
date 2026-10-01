@@ -34,6 +34,8 @@ fun StandbyScreen(
     isPhoneConnected: Boolean,
     currentHeartRate: Int,
     modifier: Modifier = Modifier,
+    isPhoneAppReachable: Boolean = true,
+    pingFeedbackMessage: String? = null,
     onSyncRequested: () -> Unit = {}
 ) {
     Box(
@@ -43,6 +45,25 @@ fun StandbyScreen(
             .clickable { onSyncRequested() },
         contentAlignment = Alignment.Center
     ) {
+        val presentation = StandbyPresentation.resolve(
+            isPhoneConnected = isPhoneConnected,
+            isPhoneAppReachable = isPhoneAppReachable,
+            pingFeedbackMessage = pingFeedbackMessage
+        )
+
+        val dotColor = when (presentation.tone) {
+            StandbyTone.DISCONNECTED -> Color(0xFFFF1744) // Red
+            StandbyTone.WARNING, StandbyTone.FEEDBACK_WARNING -> Color(0xFFFFB300) // Amber
+            StandbyTone.READY, StandbyTone.FEEDBACK_POSITIVE -> Color(0xFF00E676) // Green
+        }
+
+        val statusColor = when (presentation.tone) {
+            StandbyTone.DISCONNECTED -> Color.Gray
+            StandbyTone.WARNING, StandbyTone.FEEDBACK_WARNING -> Color(0xFFFFB300) // Amber
+            StandbyTone.FEEDBACK_POSITIVE -> Color(0xFF00E676) // Green
+            StandbyTone.READY -> Color.White
+        }
+
         Column(
             modifier = Modifier.padding(horizontal = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -54,7 +75,7 @@ fun StandbyScreen(
                     modifier = Modifier
                         .size(8.dp)
                         .clip(CircleShape)
-                        .background(if (isPhoneConnected) Color(0xFF00E676) else Color(0xFFFF1744))
+                        .background(dotColor)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
@@ -69,11 +90,9 @@ fun StandbyScreen(
             Spacer(modifier = Modifier.height(14.dp))
 
             // Main Status Text
-            val statusTitle = if (isPhoneConnected) "PHONE READY" else "WAITING FOR PHONE"
-            val statusColor = if (isPhoneConnected) Color.White else Color.Gray
             Text(
-                text = statusTitle,
-                fontSize = 16.sp,
+                text = presentation.statusTitle,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Black,
                 color = statusColor,
                 textAlign = TextAlign.Center
@@ -81,13 +100,8 @@ fun StandbyScreen(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            val helperText = if (isPhoneConnected) {
-                "Select a workout or Quick Start on your phone"
-            } else {
-                "Ensure phone app is running nearby"
-            }
             Text(
-                text = helperText,
+                text = presentation.helperText,
                 fontSize = 11.sp,
                 color = Color.Gray,
                 textAlign = TextAlign.Center

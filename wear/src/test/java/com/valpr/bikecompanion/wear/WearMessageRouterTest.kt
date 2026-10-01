@@ -78,6 +78,18 @@ class WearMessageRouterTest {
     }
 
     @Test
+    fun pingAndPongRoute_handled() {
+        val pingBytes = com.valpr.bikecompanion.shared.PingPongMessage(98765L).toByteArray()
+        val pingAction = WearMessageRouter.route(WearableProtocol.PATH_PING, pingBytes)
+        assertTrue(pingAction is WearMessageRouter.Action.Ping)
+        assertEquals(98765L, (pingAction as WearMessageRouter.Action.Ping).timestampMs)
+
+        val pongAction = WearMessageRouter.route(WearableProtocol.PATH_PONG, pingBytes)
+        assertTrue(pongAction is WearMessageRouter.Action.Pong)
+        assertEquals(98765L, (pongAction as WearMessageRouter.Action.Pong).timestampMs)
+    }
+
+    @Test
     fun unknownPath_ignored() {
         assertEquals(
             WearMessageRouter.Action.Ignore,

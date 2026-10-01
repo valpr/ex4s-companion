@@ -404,7 +404,7 @@ fun DashboardScreen(
                 PixelWatchStatusCard(
                     watchState = watchState,
                     sessionStatus = sessionState.status,
-                    onRefresh = { viewModel.refreshWatchConnection() }
+                    onRefresh = { viewModel.testWatchConnection() }
                 )
             }
 

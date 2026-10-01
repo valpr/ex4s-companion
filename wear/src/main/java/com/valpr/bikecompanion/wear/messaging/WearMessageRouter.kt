@@ -1,6 +1,7 @@
 package com.valpr.bikecompanion.wear.messaging
 
 import com.valpr.bikecompanion.shared.HapticAlertType
+import com.valpr.bikecompanion.shared.PingPongMessage
 import com.valpr.bikecompanion.shared.WearableProtocol
 import com.valpr.bikecompanion.shared.WorkoutStateMessage
 
@@ -18,6 +19,10 @@ object WearMessageRouter {
 
         data class PlayHaptic(val alert: HapticAlertType) : Action
 
+        data class Ping(val timestampMs: Long) : Action
+
+        data class Pong(val timestampMs: Long) : Action
+
         data object Ignore : Action
     }
 
@@ -29,6 +34,14 @@ object WearMessageRouter {
         WearableProtocol.PATH_HAPTIC_TRIGGER -> {
             val alert = HapticAlertType.fromByteArray(data)
             if (alert != null) Action.PlayHaptic(alert) else Action.Ignore
+        }
+        WearableProtocol.PATH_PING -> {
+            val ping = PingPongMessage.fromByteArray(data)
+            if (ping != null) Action.Ping(ping.timestampMs) else Action.Ignore
+        }
+        WearableProtocol.PATH_PONG -> {
+            val pong = PingPongMessage.fromByteArray(data)
+            if (pong != null) Action.Pong(pong.timestampMs) else Action.Ignore
         }
         else -> Action.Ignore
     }
@@ -42,10 +55,10 @@ object WearMessageRouter {
      */
     data class PhoneNode(val id: String, val displayName: String)
 
-    data class PhoneLink(val isConnected: Boolean, val nodeId: String?)
+    data class PhoneLink(val isConnected: Boolean, val nodeId: String?, val isAppReachable: Boolean = isConnected)
 
-    fun resolvePhoneLink(nodes: List<PhoneNode>): PhoneLink {
+    fun resolvePhoneLink(nodes: List<PhoneNode>, isAppReachable: Boolean = nodes.isNotEmpty()): PhoneLink {
         val phone = nodes.firstOrNull()
-        return if (phone != null) PhoneLink(true, phone.id) else PhoneLink(false, null)
+        return if (phone != null) PhoneLink(true, phone.id, isAppReachable) else PhoneLink(false, null, false)
     }
 }

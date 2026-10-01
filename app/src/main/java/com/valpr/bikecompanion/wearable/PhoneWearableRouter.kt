@@ -1,6 +1,7 @@
 package com.valpr.bikecompanion.wearable
 
 import com.valpr.bikecompanion.shared.HeartRateBatch
+import com.valpr.bikecompanion.shared.PingPongMessage
 import com.valpr.bikecompanion.shared.WearableProtocol
 
 /**
@@ -16,6 +17,8 @@ object PhoneWearableRouter {
         data object Resume : Action
         data object Pause : Action
         data object RequestWorkoutState : Action
+        data class Pong(val timestampMs: Long) : Action
+        data class Ping(val timestampMs: Long) : Action
         data object Ignore : Action
     }
 
@@ -32,6 +35,14 @@ object PhoneWearableRouter {
         WearableProtocol.PATH_RESUME_SLAP -> Action.Resume
         WearableProtocol.PATH_PAUSE_SESSION -> Action.Pause
         WearableProtocol.PATH_REQUEST_STATE -> Action.RequestWorkoutState
+        WearableProtocol.PATH_PONG -> {
+            val pong = PingPongMessage.fromByteArray(data)
+            if (pong != null) Action.Pong(pong.timestampMs) else Action.Ignore
+        }
+        WearableProtocol.PATH_PING -> {
+            val ping = PingPongMessage.fromByteArray(data)
+            if (ping != null) Action.Ping(ping.timestampMs) else Action.Ignore
+        }
         else -> Action.Ignore
     }
 

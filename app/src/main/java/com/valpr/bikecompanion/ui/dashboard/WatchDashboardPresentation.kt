@@ -55,12 +55,40 @@ object WatchDashboardPresentation {
 
         val title = watchState.nodeName.ifBlank { "Pixel Watch" }
 
-        // Standby: optical sensor is dormant while IDLE or COMPLETED.
-        if (sessionStatus == SessionStatus.IDLE || sessionStatus == SessionStatus.COMPLETED) {
+        if (watchState.isPinging) {
             return WatchDashboardUiModel(
                 title = title,
-                statusText = "Ready • Standby",
-                tone = WatchStatusTone.READY,
+                statusText = "Pinging watch…",
+                tone = WatchStatusTone.ACQUIRING,
+                needsTicker = false,
+                isConnected = true
+            )
+        }
+
+        if (!watchState.isAppInstalled) {
+            return WatchDashboardUiModel(
+                title = title,
+                statusText = watchState.pingStatusMessage ?: "Watch Paired • App Missing",
+                tone = WatchStatusTone.WARNING,
+                needsTicker = false,
+                isConnected = true
+            )
+        }
+
+        // Standby: optical sensor is dormant while IDLE or COMPLETED.
+        if (sessionStatus == SessionStatus.IDLE || sessionStatus == SessionStatus.COMPLETED) {
+            val statusText = watchState.pingStatusMessage ?: "Ready • Standby"
+            val tone = if (watchState.pingStatusMessage?.startsWith("Verified") == true) {
+                WatchStatusTone.LIVE
+            } else if (watchState.pingStatusMessage != null) {
+                WatchStatusTone.WARNING
+            } else {
+                WatchStatusTone.READY
+            }
+            return WatchDashboardUiModel(
+                title = title,
+                statusText = statusText,
+                tone = tone,
                 needsTicker = false,
                 isConnected = true
             )

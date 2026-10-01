@@ -53,6 +53,19 @@ class PhoneWearableRouterTest {
             PhoneWearableRouter.Action.RequestWorkoutState,
             PhoneWearableRouter.route(WearableProtocol.PATH_REQUEST_STATE, byteArrayOf(0x01))
         )
+        val pingBytes = com.valpr.bikecompanion.shared.PingPongMessage(12345L).toByteArray()
+        assertEquals(
+            PhoneWearableRouter.Action.Pong(12345L),
+            PhoneWearableRouter.route(WearableProtocol.PATH_PONG, pingBytes)
+        )
+        assertEquals(
+            PhoneWearableRouter.Action.Ping(12345L),
+            PhoneWearableRouter.route(WearableProtocol.PATH_PING, pingBytes)
+        )
+        assertEquals(
+            PhoneWearableRouter.Action.Ignore,
+            PhoneWearableRouter.route(WearableProtocol.PATH_PONG, byteArrayOf(0x00))
+        )
         assertEquals(
             PhoneWearableRouter.Action.Ignore,
             PhoneWearableRouter.route("/unknown", byteArrayOf(0x01))

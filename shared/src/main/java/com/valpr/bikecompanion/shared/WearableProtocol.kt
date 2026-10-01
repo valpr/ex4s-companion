@@ -18,6 +18,8 @@ object WearableProtocol {
     const val PATH_HAPTIC_TRIGGER = "/workout/haptic"
     const val PATH_REQUEST_STATE = "/workout/request_state"
     const val PATH_PAUSE_SESSION = "/workout/pause"
+    const val PATH_PING = "/test/ping"
+    const val PATH_PONG = "/test/pong"
 
     // Capabilities
     const val CAPABILITY_PHONE_APP = "bike_companion_phone"
@@ -238,6 +240,37 @@ enum class HapticAlertType(val id: Byte) {
                 RESUME_TRIGGERED.id -> RESUME_TRIGGERED
                 WORKOUT_COMPLETED.id -> WORKOUT_COMPLETED
                 else -> null
+            }
+        }
+    }
+}
+
+/**
+ * Test handshake packet for round-trip latency and connectivity verification.
+ */
+data class PingPongMessage(val timestampMs: Long) {
+    fun toByteArray(): ByteArray {
+        val baos = ByteArrayOutputStream(9)
+        DataOutputStream(baos).use { dos ->
+            dos.writeByte(MAGIC_BYTE.toInt())
+            dos.writeLong(timestampMs)
+        }
+        return baos.toByteArray()
+    }
+
+    companion object {
+        private const val MAGIC_BYTE: Byte = 0x50 // 'P'
+
+        fun fromByteArray(bytes: ByteArray): PingPongMessage? {
+            if (bytes.size < 9) return null
+            return try {
+                DataInputStream(ByteArrayInputStream(bytes)).use { dis ->
+                    val magic = dis.readByte()
+                    if (magic != MAGIC_BYTE) return null
+                    PingPongMessage(timestampMs = dis.readLong())
+                }
+            } catch (e: Exception) {
+                null
             }
         }
     }

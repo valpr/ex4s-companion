@@ -87,6 +87,11 @@ This document contains mandatory guidelines, invariants, and hard-learned lesson
   * Incoming haptic triggers on Wear OS must be dispatched directly by `WearMessageListenerService` via `(application as WearBikeApplication).hapticManager.playAlert()` so critical threshold warnings vibrate immediately without relying on `MainActivity` to be open or in the foreground. Incoming workout state must update `WearMessageManager` immediately and route through pure `resolveServiceAction` to govern `WearWorkoutTrackingService`.
 * **FGS null-state resilience:**
   * `WearWorkoutTrackingService` must treat `state == null` as an uninitialized transition window (waiting for first phone broadcast), never as a terminal state. Terminal teardown (`stopSelf()`) must only execute when state is explicitly `IDLE` or `COMPLETED`.
+* **Application ID & Version Parity Across Companion Modules (Play Services Wearable Data Layer):**
+  * The phone app (`:app`) and Wear OS app (`:wear`) **must share the exact same `applicationId`** across all build types (e.g. `com.valpr.bikecompanion`).
+  * **Never** configure `applicationIdSuffix` (e.g. `.debug`) in `:app` without an identical configuration in `:wear`. Google Play Services Wearable Data Layer (`MessageClient`, `CapabilityClient`, `DataClient`) isolates cross-device routing strictly by package name / `applicationId`. Any discrepancy results in silent message drops and completely broken capability resolution across the phone and watch.
+  * Keep `versionCode` and base `versionName` synchronized between `:app` and `:wear` so multi-APK releases, companion pairing, and Play Store dependency matching never reject or desync companion builds.
+  * **Capability vs. Topology Separation:** Raw Bluetooth topology (`NodeClient.connectedNodes`) only indicates OS-level Bluetooth pairing. Never treat a connected node as companion-ready without verifying app capability advertisement (`CAPABILITY_WEAR_APP` / `CAPABILITY_PHONE_APP`) or active ping handshake.
 
 ---
 

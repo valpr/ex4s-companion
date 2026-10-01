@@ -69,6 +69,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         phoneWearableManager.refreshConnectedNodes()
     }
 
+    fun testWatchConnection() {
+        phoneWearableManager.sendPing()
+    }
+
     fun loadWorkouts() {
         viewModelScope.launch(Dispatchers.IO) {
             val list = workoutRepository.getCachedWorkouts()

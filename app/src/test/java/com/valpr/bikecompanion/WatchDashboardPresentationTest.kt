@@ -157,4 +157,51 @@ class WatchDashboardPresentationTest {
         assertEquals(WatchStatusTone.LIVE, model.tone)
         assertTrue(model.needsTicker)
     }
+
+    @Test
+    fun connected_appMissing_showsWatchPairedAppMissing() {
+        val model = WatchDashboardPresentation.resolve(
+            watchState = state(connected = true).copy(isAppInstalled = false),
+            sessionStatus = SessionStatus.IDLE,
+            nowMs = 15_000L
+        )
+
+        assertEquals("Pixel Watch 3", model.title)
+        assertEquals("Watch Paired • App Missing", model.statusText)
+        assertEquals(WatchStatusTone.WARNING, model.tone)
+        assertFalse(model.needsTicker)
+        assertTrue(model.isConnected)
+    }
+
+    @Test
+    fun connected_pinging_showsPingingWatch() {
+        val model = WatchDashboardPresentation.resolve(
+            watchState = state(connected = true).copy(isPinging = true),
+            sessionStatus = SessionStatus.IDLE,
+            nowMs = 15_000L
+        )
+
+        assertEquals("Pixel Watch 3", model.title)
+        assertEquals("Pinging watch…", model.statusText)
+        assertEquals(WatchStatusTone.ACQUIRING, model.tone)
+        assertFalse(model.needsTicker)
+    }
+
+    @Test
+    fun connected_pingVerified_showsVerifiedLatency() {
+        val model = WatchDashboardPresentation.resolve(
+            watchState = state(connected = true).copy(
+                isPinging = false,
+                lastPingRoundTripMs = 38L,
+                pingStatusMessage = "Verified (38ms)"
+            ),
+            sessionStatus = SessionStatus.IDLE,
+            nowMs = 15_000L
+        )
+
+        assertEquals("Pixel Watch 3", model.title)
+        assertEquals("Verified (38ms)", model.statusText)
+        assertEquals(WatchStatusTone.LIVE, model.tone)
+        assertFalse(model.needsTicker)
+    }
 }

@@ -103,6 +103,8 @@ class MainActivity : ComponentActivity() {
 fun WearApp(messageManager: WearMessageManager, healthServicesManager: HealthServicesManager, isAmbient: Boolean) {
     val context = LocalContext.current
     val isPhoneConnected by messageManager.isPhoneConnected.collectAsState()
+    val isPhoneAppReachable by messageManager.isPhoneAppReachable.collectAsState()
+    val pingFeedbackMessage by messageManager.pingFeedbackMessage.collectAsState()
     val workoutState by messageManager.workoutState.collectAsState()
     val liveHr by healthServicesManager.currentHeartRate.collectAsState()
 
@@ -216,7 +218,9 @@ fun WearApp(messageManager: WearMessageManager, healthServicesManager: HealthSer
                 StandbyScreen(
                     isPhoneConnected = isPhoneConnected,
                     currentHeartRate = liveHr,
-                    onSyncRequested = { messageManager.requestWorkoutState() }
+                    isPhoneAppReachable = isPhoneAppReachable,
+                    pingFeedbackMessage = pingFeedbackMessage,
+                    onSyncRequested = { messageManager.triggerManualSync() }
                 )
             }
         }
