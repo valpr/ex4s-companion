@@ -25,6 +25,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     val workoutRepository = app.workoutRepository
     val sessionManager = app.workoutSessionManager
     val sessionState: StateFlow<WorkoutSessionState> = sessionManager.sessionState
+    val historyRepository = app.workoutHistoryRepository
     val phoneWearableManager = app.phoneWearableManager
     val watchState = phoneWearableManager.watchState
     val userProfileRepo = app.userProfileRepository
@@ -39,8 +40,19 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _cachedWorkouts = MutableStateFlow<List<CachedWorkoutHeader>>(emptyList())
     val cachedWorkouts: StateFlow<List<CachedWorkoutHeader>> = _cachedWorkouts.asStateFlow()
 
+    private val _historyHeaders =
+        MutableStateFlow<List<com.valpr.bikecompanion.history.RideHeader>>(emptyList())
+    val historyHeaders: StateFlow<List<com.valpr.bikecompanion.history.RideHeader>> =
+        _historyHeaders.asStateFlow()
+
+    private val _completedFilenames = MutableStateFlow<Set<String>>(emptySet())
+    val completedFilenames: StateFlow<Set<String>> = _completedFilenames.asStateFlow()
+
     private val _selectedWorkoutPreview = MutableStateFlow<Workout?>(null)
     val selectedWorkoutPreview: StateFlow<Workout?> = _selectedWorkoutPreview.asStateFlow()
+
+    private val _selectedWorkoutFilename = MutableStateFlow<String?>(null)
+    val selectedWorkoutFilename: StateFlow<String?> = _selectedWorkoutFilename.asStateFlow()
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
@@ -49,6 +61,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         loadWorkouts()
+        loadHistory()
         refreshWatchConnection()
     }
 
@@ -63,12 +76,24 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun loadHistory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val headers = historyRepository.listHeaders()
+            _historyHeaders.value = headers
+            _completedFilenames.value = headers.mapNotNull {
+                it.sourceWorkoutFilename?.lowercase()
+            }.toSet()
+        }
+    }
+
     fun selectWorkoutForPreview(filename: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val result = workoutRepository.loadWorkout(filename)
             if (result.isSuccess) {
                 _selectedWorkoutPreview.value = result.getOrNull()
+                _selectedWorkoutFilename.value = filename
             } else {
+                _selectedWorkoutFilename.value = null
                 _errorMessage.value = "Failed to load workout: ${result.exceptionOrNull()?.message}"
             }
         }
@@ -76,6 +101,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun clearWorkoutPreview() {
         _selectedWorkoutPreview.value = null
+        _selectedWorkoutFilename.value = null
     }
 
     fun importWorkoutFile(uri: Uri) {
@@ -111,8 +137,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch(Dispatchers.IO) {
             workoutRepository.deleteWorkout(filename)
             loadWorkouts()
-            if (_selectedWorkoutPreview.value?.name == filename) {
+            if (_selectedWorkoutFilename.value == filename) {
                 _selectedWorkoutPreview.value = null
+                _selectedWorkoutFilename.value = null
             }
         }
     }

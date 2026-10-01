@@ -7,6 +7,7 @@ import com.valpr.bikecompanion.ble.EchelonBleManager
 import com.valpr.bikecompanion.data.UserProfileRepository
 import com.valpr.bikecompanion.data.userProfileDataStore
 import com.valpr.bikecompanion.health.HealthConnectManager
+import com.valpr.bikecompanion.history.WorkoutHistoryRepository
 import com.valpr.bikecompanion.wearable.PhoneWearableManager
 import com.valpr.bikecompanion.workout.WorkoutRepository
 import com.valpr.bikecompanion.workout.WorkoutSessionManager
@@ -29,6 +30,9 @@ class BikeApplication : Application() {
         private set
 
     lateinit var healthConnectManager: HealthConnectManager
+        private set
+
+    lateinit var workoutHistoryRepository: WorkoutHistoryRepository
         private set
 
     override fun onCreate() {
@@ -57,6 +61,10 @@ class BikeApplication : Application() {
         )
 
         healthConnectManager = HealthConnectManager(
+            context = applicationContext
+        )
+
+        workoutHistoryRepository = WorkoutHistoryRepository(
             context = applicationContext
         )
     }

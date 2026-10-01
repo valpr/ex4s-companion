@@ -80,6 +80,17 @@
             </intent-filter>
         </service>
 
+        <!-- TCX activity export sharing -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/filepaths" />
+        </provider>
+
         <!-- Health Connect permissions rationale (required for Play Store + grant flow) -->
         <activity-alias
             android:name=".HealthConnectRationaleActivity"

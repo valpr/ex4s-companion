@@ -29,7 +29,9 @@ enum class AppScreen {
     DASHBOARD,
     ACTIVE_WORKOUT,
     WORKOUT_SUMMARY,
-    ATHLETE_STATS
+    ATHLETE_STATS,
+    RIDE_HISTORY,
+    RIDE_DETAIL
 }
 
 @Composable
@@ -60,6 +62,31 @@ fun MainNavigation(onRequestPermissions: () -> Unit, modifier: Modifier = Modifi
                     currentScreen = AppScreen.ACTIVE_WORKOUT
                 },
                 onNavigateToAthleteStats = { currentScreen = AppScreen.ATHLETE_STATS },
+                onNavigateToHistory = { currentScreen = AppScreen.RIDE_HISTORY },
+                modifier = modifier
+            )
+        }
+
+        AppScreen.RIDE_HISTORY -> {
+            BackHandler { currentScreen = AppScreen.DASHBOARD }
+            val historyVm: com.valpr.bikecompanion.ui.history.RideHistoryViewModel = viewModel()
+            com.valpr.bikecompanion.ui.history.RideHistoryScreen(
+                viewModel = historyVm,
+                onNavigateBack = { currentScreen = AppScreen.DASHBOARD },
+                onRideClick = { id ->
+                    historyVm.selectRide(id)
+                    currentScreen = AppScreen.RIDE_DETAIL
+                },
+                modifier = modifier
+            )
+        }
+
+        AppScreen.RIDE_DETAIL -> {
+            BackHandler { currentScreen = AppScreen.RIDE_HISTORY }
+            val historyVm: com.valpr.bikecompanion.ui.history.RideHistoryViewModel = viewModel()
+            com.valpr.bikecompanion.ui.history.RideDetailScreen(
+                viewModel = historyVm,
+                onNavigateBack = { currentScreen = AppScreen.RIDE_HISTORY },
                 modifier = modifier
             )
         }
@@ -106,8 +133,23 @@ fun MainNavigation(onRequestPermissions: () -> Unit, modifier: Modifier = Modifi
             }
             sessionState.summary?.let { summary ->
                 // Batch-write to Health Connect once per completed session.
+                // Persist to local ride history (idempotent on start epoch).
                 LaunchedEffect(summary) {
                     healthManager.syncWorkout(summary, userProfile.weightKg)
+                    try {
+                        // Prefer the real library filename threaded through startWorkout();
+                        // fall back to name-based matching for sessions started before it existed.
+                        val filename = sessionState.sourceWorkoutFilename
+                            ?: sessionState.workout?.let {
+                                com.valpr.bikecompanion.history.BeginnerFilenameMatcher.filenameFor(
+                                    it.name,
+                                    it.totalDurationSeconds
+                                )
+                            }
+                        app.workoutHistoryRepository.save(summary, filename)
+                    } catch (_: Exception) {
+                        // History is best-effort; Health Connect sync must not be affected.
+                    }
                 }
                 WorkoutSummaryScreen(
                     summary = summary,
@@ -120,6 +162,13 @@ fun MainNavigation(onRequestPermissions: () -> Unit, modifier: Modifier = Modifi
                     onSyncRetry = { healthManager.retry() },
                     onSyncConnect = {
                         permissionLauncher.launch(HealthConnectManager.requiredPermissions())
+                    },
+                    onExportTcx = {
+                        try {
+                            com.valpr.bikecompanion.history.TcxShareHelper.shareSummary(context, summary)
+                        } catch (_: Exception) {
+                            // Share sheet unavailable; summary remains usable.
+                        }
                     },
                     modifier = modifier
                 )

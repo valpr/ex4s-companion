@@ -87,7 +87,8 @@ fun DashboardScreen(
     onNavigateToAthleteStats: () -> Unit,
     modifier: Modifier = Modifier,
     onResumeWorkout: () -> Unit = onStartWorkout,
-    onNavigateToSettings: () -> Unit = onNavigateToAthleteStats
+    onNavigateToSettings: () -> Unit = onNavigateToAthleteStats,
+    onNavigateToHistory: () -> Unit = {}
 ) {
     val bleState by viewModel.bleManager.connectionState.collectAsState()
     val telemetry by viewModel.bleManager.telemetry.collectAsState()
@@ -97,12 +98,19 @@ fun DashboardScreen(
     val sessionState by viewModel.sessionState.collectAsState()
     val watchState by viewModel.watchState.collectAsState()
     val selectedPreview by viewModel.selectedWorkoutPreview.collectAsState()
+    val selectedPreviewFilename by viewModel.selectedWorkoutFilename.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val historyHeaders by viewModel.historyHeaders.collectAsState()
+    val completedFilenames by viewModel.completedFilenames.collectAsState()
+
+    LaunchedEffect(Unit) {
+        viewModel.loadHistory()
+    }
 
     var showScanDialog by remember { mutableStateOf(false) }
     var showFtpPromptDialog by remember { mutableStateOf(false) }
     var ftpInputValue by remember { mutableStateOf("") }
-    var pendingWorkoutToStart by remember { mutableStateOf<Workout?>(null) }
+    var pendingWorkoutToStart by remember { mutableStateOf<Pair<Workout, String?>?>(null) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -168,10 +176,11 @@ fun DashboardScreen(
                         if (enteredFtp > 0) {
                             viewModel.updateFtp(enteredFtp)
                             showFtpPromptDialog = false
-                            pendingWorkoutToStart?.let { workout ->
+                            pendingWorkoutToStart?.let { (workout, filename) ->
                                 viewModel.refreshWatchConnection()
-                                val result = viewModel.sessionManager.startWorkout(workout)
+                                val result = viewModel.sessionManager.startWorkout(workout, filename)
                                 if (result.isSuccess) {
+                                    pendingWorkoutToStart = null
                                     onStartWorkout()
                                 }
                             }
@@ -238,13 +247,14 @@ fun DashboardScreen(
 
                 Button(
                     onClick = {
+                        val filename = selectedPreviewFilename
                         viewModel.clearWorkoutPreview()
                         if (!userProfile.isFtpConfigured) {
-                            pendingWorkoutToStart = workout
+                            pendingWorkoutToStart = workout to filename
                             showFtpPromptDialog = true
                         } else {
                             viewModel.refreshWatchConnection()
-                            val result = viewModel.sessionManager.startWorkout(workout)
+                            val result = viewModel.sessionManager.startWorkout(workout, filename)
                             if (result.isSuccess) {
                                 onStartWorkout()
                             }
@@ -349,7 +359,16 @@ fun DashboardScreen(
                 )
             }
 
-            // 4. Beginner Path (graduated recommendations for brand-new riders).
+            // 4. Ride History entry (persisted completed rides + TCX export)
+            item {
+                com.valpr.bikecompanion.ui.history.CompactHistoryEntry(
+                    rideCount = historyHeaders.size,
+                    lastRideName = historyHeaders.firstOrNull()?.workoutName,
+                    onViewAll = onNavigateToHistory
+                )
+            }
+
+            // 5. Beginner Path (graduated recommendations for brand-new riders).
             // Dismissable for experienced riders; a compact restore row brings it back.
             if (userProfile.beginnerPathDismissed) {
                 item {
@@ -361,6 +380,7 @@ fun DashboardScreen(
                 item {
                     BeginnerPathCard(
                         cachedWorkouts = cachedWorkouts,
+                        completedFilenames = completedFilenames,
                         isCollapsed = userProfile.beginnerPathCollapsed,
                         onToggleCollapsed = { viewModel.setBeginnerPathCollapsed(!userProfile.beginnerPathCollapsed) },
                         onDismiss = { viewModel.setBeginnerPathDismissed(true) },
@@ -668,14 +688,15 @@ internal fun BeginnerPathCard(
     onLevelClick: (String) -> Unit,
     isCollapsed: Boolean = false,
     onToggleCollapsed: () -> Unit = {},
-    onDismiss: () -> Unit = {}
+    onDismiss: () -> Unit = {},
+    completedFilenames: Set<String> = emptySet()
 ) {
     val headersByFile = remember(cachedWorkouts) {
         cachedWorkouts.associateBy { it.filename.lowercase() }
     }
-    // Without persisted ride history yet, always highlight Level 1 as the
-    // entry point; the ordered list itself communicates the progression.
-    val recommended = remember { BeginnerPlan.recommendNext(emptySet()) }
+    // Highlight the next uncompleted level from real ride history; empty history → Level 1.
+    val recommended = remember(completedFilenames) { BeginnerPlan.recommendNext(completedFilenames) }
+    val graduated = remember(completedFilenames) { BeginnerPlan.hasGraduated(completedFilenames) }
 
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF0B2E1F)),
@@ -742,6 +763,7 @@ internal fun BeginnerPathCard(
                     BeginnerPlan.LEVELS.forEach { level ->
                         val header = headersByFile[level.filename.lowercase()]
                         val isRecommended = level.filename.equals(recommended.filename, ignoreCase = true)
+                        val isCompleted = completedFilenames.contains(level.filename.lowercase())
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -771,7 +793,7 @@ internal fun BeginnerPathCard(
                                         fontSize = 14.sp,
                                         color = Color.White
                                     )
-                                    if (isRecommended && header != null) {
+                                    if (isRecommended && header != null && !graduated) {
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Box(
                                             contentAlignment = Alignment.Center,
@@ -795,8 +817,9 @@ internal fun BeginnerPathCard(
                                 )
                                 if (header != null) {
                                     val minutes = header.durationSeconds / 60
+                                    val doneSuffix = if (isCompleted) " • ✓ Done" else ""
                                     Text(
-                                        "$minutes min • TSS %.0f".format(header.estimatedTss),
+                                        "$minutes min • TSS %.0f$doneSuffix".format(header.estimatedTss),
                                         fontSize = 11.sp,
                                         color = Color(0xFF00E676),
                                         fontWeight = FontWeight.SemiBold
@@ -819,7 +842,11 @@ internal fun BeginnerPathCard(
 
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        "Graduation: Sweet Spot Intervals (30 min) (${BeginnerPlan.PACING_TIMELINE}). Easy efforts first — fitness builds week to week.",
+                        if (graduated) {
+                            "Graduated! You finished all 4 levels — time for Sweet Spot Intervals (30 min)."
+                        } else {
+                            "Graduation: Sweet Spot Intervals (30 min) (${BeginnerPlan.PACING_TIMELINE}). Easy efforts first — fitness builds week to week."
+                        },
                         fontSize = 11.sp,
                         color = Color(0xFF78909C)
                     )

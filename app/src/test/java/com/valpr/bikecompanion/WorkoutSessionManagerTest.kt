@@ -17,6 +17,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -150,6 +151,57 @@ class WorkoutSessionManagerTest {
         assertEquals("Test Ride", state.workout?.name)
         assertEquals(600, state.totalSeconds)
         assertEquals(0, state.elapsedSeconds)
+    }
+
+    @Test
+    fun startWorkout_propagatesSourceFilename() = runTest {
+        val manager = createManager()
+        settleManager()
+        val testWorkout = Workout(
+            name = "My Custom Endurance Ride",
+            segments = listOf(
+                WorkoutSegment.SteadyState(durationSeconds = 600, power = 0.85f)
+            )
+        )
+
+        manager.startWorkout(testWorkout, "my_custom_ride.zwo")
+
+        assertEquals("my_custom_ride.zwo", manager.sessionState.value.sourceWorkoutFilename)
+    }
+
+    @Test
+    fun startWorkout_withoutFilename_leavesAttributionNull() = runTest {
+        val manager = createManager()
+        settleManager()
+        val testWorkout = Workout(
+            name = "Test Ride",
+            segments = listOf(
+                WorkoutSegment.SteadyState(durationSeconds = 600, power = 0.85f)
+            )
+        )
+
+        manager.startWorkout(testWorkout)
+        assertNull(manager.sessionState.value.sourceWorkoutFilename)
+
+        manager.startWorkout(null)
+        assertNull(manager.sessionState.value.sourceWorkoutFilename)
+    }
+
+    @Test
+    fun resetToIdle_clearsSourceFilename() = runTest {
+        val manager = createManager()
+        settleManager()
+        val testWorkout = Workout(
+            name = "Test Ride",
+            segments = listOf(
+                WorkoutSegment.SteadyState(durationSeconds = 600, power = 0.85f)
+            )
+        )
+        manager.startWorkout(testWorkout, "test_ride.zwo")
+        assertEquals("test_ride.zwo", manager.sessionState.value.sourceWorkoutFilename)
+
+        manager.resetToIdle()
+        assertNull(manager.sessionState.value.sourceWorkoutFilename)
     }
 
     @Test

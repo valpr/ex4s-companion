@@ -26,6 +26,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -54,7 +55,8 @@ fun WorkoutSummaryScreen(
     modifier: Modifier = Modifier,
     healthSyncState: HealthSyncState = HealthSyncState.Idle,
     onSyncRetry: () -> Unit = {},
-    onSyncConnect: () -> Unit = {}
+    onSyncConnect: () -> Unit = {},
+    onExportTcx: () -> Unit = {}
 ) {
     Scaffold(
         topBar = {
@@ -213,6 +215,15 @@ fun WorkoutSummaryScreen(
                     .height(54.dp)
             ) {
                 Text("Return to Dashboard", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+
+            OutlinedButton(
+                onClick = onExportTcx,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+            ) {
+                Text("Export .tcx (Strava / Garmin)", fontSize = 14.sp)
             }
 
             Spacer(modifier = Modifier.height(16.dp))

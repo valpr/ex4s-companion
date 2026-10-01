@@ -62,6 +62,8 @@ data class WorkoutSummary(
 data class WorkoutSessionState(
     val status: SessionStatus = SessionStatus.IDLE,
     val workout: Workout? = null,
+    /** Original `.zwo` library filename (null for Free Ride). Feeds history attribution. */
+    val sourceWorkoutFilename: String? = null,
     val elapsedSeconds: Int = 0,
     val totalSeconds: Int = 0,
     val targetWatts: Int? = null,
@@ -211,8 +213,10 @@ class WorkoutSessionManager(
      * Both require a live bike connection — starting disconnected would record
      * phantom zero-telemetry and send ERG commands into a dropped GATT.
      * Returns failure instead of silently falling back to a phantom 200W target.
+     * @param sourceFilename original `.zwo` library filename for history attribution
+     * (null for Free Ride or unknown sources).
      */
-    fun startWorkout(workout: Workout?): Result<Unit> {
+    fun startWorkout(workout: Workout?, sourceFilename: String? = null): Result<Unit> {
         if (!isBikeConnected()) {
             return Result.failure(IllegalStateException("Bike not connected"))
         }
@@ -241,6 +245,7 @@ class WorkoutSessionManager(
             WorkoutSessionState(
                 status = SessionStatus.RUNNING,
                 workout = workout,
+                sourceWorkoutFilename = sourceFilename,
                 elapsedSeconds = 0,
                 totalSeconds = totalDuration,
                 intensityScale = 1.0f,
