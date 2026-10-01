@@ -45,6 +45,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
@@ -52,8 +53,11 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -885,10 +889,19 @@ fun AthleteStatsScreen(
                             Spacer(modifier = Modifier.height(16.dp))
 
                             // Advanced ERG Engine Tuning
-                            Text("Advanced Engine Tuning", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            TuningHeadingWithTooltip(
+                                title = EngineTuningHelp.ENGINE_TUNING_TITLE,
+                                tooltipText = EngineTuningHelp.ENGINE_TUNING_TOOLTIP,
+                                contentDescription = EngineTuningHelp.ENGINE_TUNING_CONTENT_DESC,
+                                isSectionHeader = true
+                            )
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            Text("Proportional Gain (Kp): %.3f".format(sliderKp), style = MaterialTheme.typography.bodySmall)
+                            TuningHeadingWithTooltip(
+                                title = "Proportional Gain (Kp): %.3f".format(sliderKp),
+                                tooltipText = EngineTuningHelp.KP_TOOLTIP,
+                                contentDescription = EngineTuningHelp.KP_CONTENT_DESC
+                            )
                             Slider(
                                 value = sliderKp,
                                 onValueChange = { sliderKp = it },
@@ -898,7 +911,11 @@ fun AthleteStatsScreen(
                                 }
                             )
 
-                            Text("Integral Gain (Ki): %.4f".format(sliderKi), style = MaterialTheme.typography.bodySmall)
+                            TuningHeadingWithTooltip(
+                                title = "Integral Gain (Ki): %.4f".format(sliderKi),
+                                tooltipText = EngineTuningHelp.KI_TOOLTIP,
+                                contentDescription = EngineTuningHelp.KI_CONTENT_DESC
+                            )
                             Slider(
                                 value = sliderKi,
                                 onValueChange = { sliderKi = it },
@@ -908,7 +925,11 @@ fun AthleteStatsScreen(
                                 }
                             )
 
-                            Text("Cadence Floor: $sliderFloor RPM (Bailout below this)", style = MaterialTheme.typography.bodySmall)
+                            TuningHeadingWithTooltip(
+                                title = "Cadence Floor: $sliderFloor RPM (Bailout below this)",
+                                tooltipText = EngineTuningHelp.CADENCE_FLOOR_TOOLTIP,
+                                contentDescription = EngineTuningHelp.CADENCE_FLOOR_CONTENT_DESC
+                            )
                             Slider(
                                 value = sliderFloor.toFloat(),
                                 onValueChange = { sliderFloor = it.roundToInt() },
@@ -919,7 +940,11 @@ fun AthleteStatsScreen(
                                 }
                             )
 
-                            Text("Recovery Threshold: $sliderRecovery RPM (Sustained 3s to re-engage)", style = MaterialTheme.typography.bodySmall)
+                            TuningHeadingWithTooltip(
+                                title = "Recovery Threshold: $sliderRecovery RPM (Sustained 3s to re-engage)",
+                                tooltipText = EngineTuningHelp.RECOVERY_THRESHOLD_TOOLTIP,
+                                contentDescription = EngineTuningHelp.RECOVERY_THRESHOLD_CONTENT_DESC
+                            )
                             Slider(
                                 value = sliderRecovery.toFloat(),
                                 onValueChange = { sliderRecovery = it.roundToInt() },
@@ -1227,6 +1252,62 @@ private fun MetricImportRow(
             if (isStale) {
                 Text("Older than profile", fontSize = 10.sp, color = AccentAmber)
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TuningHeadingWithTooltip(
+    title: String,
+    tooltipText: String,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    isSectionHeader: Boolean = false
+) {
+    val tooltipState = rememberTooltipState(isPersistent = true)
+    val tooltipScope = rememberCoroutineScope()
+
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = {
+            PlainTooltip {
+                Text(
+                    tooltipText,
+                    modifier = Modifier.padding(4.dp)
+                )
+            }
+        },
+        state = tooltipState,
+        modifier = modifier
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.clickable {
+                tooltipScope.launch { tooltipState.show() }
+            }
+        ) {
+            if (isSectionHeader) {
+                Text(
+                    text = title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            } else {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            }
+            Spacer(modifier = Modifier.width(4.dp))
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = contentDescription,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(if (isSectionHeader) 16.dp else 14.dp)
+            )
         }
     }
 }

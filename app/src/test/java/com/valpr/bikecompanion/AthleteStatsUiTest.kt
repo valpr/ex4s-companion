@@ -3,6 +3,7 @@ package com.valpr.bikecompanion
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -118,5 +119,54 @@ class AthleteStatsUiTest {
         // Age 30 Male default: Tanaka Max HR = 187, Critical HR = 187 * 0.95 = 178
         composeRule.onNodeWithText("187").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("178").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun advancedEngineTuning_tooltipsDisplayedWhenClicked() {
+        val app = ApplicationProvider.getApplicationContext<BikeApplication>()
+        val viewModel = AthleteStatsViewModel(app)
+
+        composeRule.setContent {
+            AthleteStatsScreen(
+                viewModel = viewModel,
+                onNavigateBack = {}
+            )
+        }
+
+        // Expand hardware section
+        composeRule.onNodeWithText("Bike & Hardware Settings").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        // Verify all tooltip trigger info icons exist
+        composeRule.onNodeWithContentDescription("Advanced Engine Tuning info").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Proportional Gain info").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Integral Gain info").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Cadence Floor info").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Recovery Threshold info").performScrollTo().assertIsDisplayed()
+
+        // Click Cadence Floor info and verify tooltip text appears
+        composeRule.onNodeWithContentDescription("Cadence Floor info").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Anti-spiral safety threshold", substring = true).assertIsDisplayed()
+
+        // Click Proportional Gain info and verify tooltip text appears
+        composeRule.onNodeWithContentDescription("Proportional Gain info").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Controls how aggressively resistance adjusts", substring = true).assertIsDisplayed()
+
+        // Click Integral Gain info and verify tooltip text appears
+        composeRule.onNodeWithContentDescription("Integral Gain info").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Accumulates steady-state power error", substring = true).assertIsDisplayed()
+
+        // Click Recovery Threshold info and verify tooltip text appears
+        composeRule.onNodeWithContentDescription("Recovery Threshold info").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Cadence required to resume ERG mode", substring = true).assertIsDisplayed()
+
+        // Click Advanced Engine Tuning info and verify tooltip text appears
+        composeRule.onNodeWithContentDescription("Advanced Engine Tuning info").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Fine-tunes the ERG mode closed-loop resistance controller", substring = true).assertIsDisplayed()
     }
 }
