@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Watch
@@ -45,14 +46,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -60,6 +65,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +73,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.valpr.bikecompanion.data.BleConnectionState
@@ -78,6 +85,7 @@ import com.valpr.bikecompanion.workout.SessionStatus
 import com.valpr.bikecompanion.workout.Workout
 import com.valpr.bikecompanion.workout.WorkoutSessionState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -111,6 +119,7 @@ fun DashboardScreen(
     var showFtpPromptDialog by remember { mutableStateOf(false) }
     var ftpInputValue by remember { mutableStateOf("") }
     var pendingWorkoutToStart by remember { mutableStateOf<Pair<Workout, String?>?>(null) }
+    var workoutToDelete by remember { mutableStateOf<CachedWorkoutHeader?>(null) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -206,6 +215,18 @@ fun DashboardScreen(
         )
     }
 
+    // Workout Deletion Confirmation Dialog
+    workoutToDelete?.let { target ->
+        DeleteWorkoutDialog(
+            workoutName = target.name,
+            onConfirm = {
+                viewModel.deleteWorkout(target.filename)
+                workoutToDelete = null
+            },
+            onDismiss = { workoutToDelete = null }
+        )
+    }
+
     // Workout Detail Preview Modal
     selectedPreview?.let { workout ->
         ModalBottomSheet(
@@ -226,13 +247,46 @@ fun DashboardScreen(
 
                 val minutes = workout.totalDurationSeconds / 60
                 val seconds = workout.totalDurationSeconds % 60
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                val tssTooltipState = rememberTooltipState(isPersistent = true)
+                val tooltipScope = rememberCoroutineScope()
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text("Duration: %02d:%02d".format(minutes, seconds), fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "TSS: %.1f".format(workout.estimatedTss),
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        tooltip = {
+                            PlainTooltip {
+                                Text(
+                                    "Training Stress Score (TSS): Estimates total physiological load based on workout intensity and duration relative to your FTP (1 hr @ 100% FTP = 100 TSS). <50: Light, 50–100: Moderate, 100+: Demanding.",
+                                    modifier = Modifier.padding(4.dp)
+                                )
+                            }
+                        },
+                        state = tssTooltipState
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable {
+                                tooltipScope.launch { tssTooltipState.show() }
+                            }
+                        ) {
+                            Text(
+                                "TSS: %.1f".format(workout.estimatedTss),
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = "TSS info",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                 }
 
                 if (workout.description.isNotBlank()) {
@@ -349,6 +403,7 @@ fun DashboardScreen(
             item {
                 PixelWatchStatusCard(
                     watchState = watchState,
+                    sessionStatus = sessionState.status,
                     onRefresh = { viewModel.refreshWatchConnection() }
                 )
             }
@@ -454,7 +509,7 @@ fun DashboardScreen(
                     WorkoutItemCard(
                         header = header,
                         onClick = { viewModel.selectWorkoutForPreview(header.filename) },
-                        onDelete = { viewModel.deleteWorkout(header.filename) }
+                        onDelete = { workoutToDelete = header }
                     )
                 }
             }
@@ -508,7 +563,7 @@ private fun BikeConnectionCard(
                 val subtitle = if (isConnected) {
                     "$telemetryWatts W  •  $telemetryCadence RPM  •  Ready to ride"
                 } else {
-                    "Tap to search & connect via BLE"
+                    "Tap to search & connect"
                 }
 
                 Text(title, fontWeight = FontWeight.Bold, fontSize = 15.sp)
@@ -530,27 +585,26 @@ private fun BikeConnectionCard(
 @Composable
 private fun PixelWatchStatusCard(
     watchState: com.valpr.bikecompanion.wearable.WearableWatchState,
+    sessionStatus: com.valpr.bikecompanion.workout.SessionStatus,
     onRefresh: () -> Unit = {}
 ) {
-    // 1s ticker so LIVE flips to STALE even when no new batches arrive to
-    // trigger recomposition. Gated to the only case that changes with time.
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    val needsTicker = watchState.isConnected && watchState.lastHeartRateTimestampMs > 0L
-    LaunchedEffect(needsTicker, watchState.lastHeartRateTimestampMs) {
+    val uiModel = remember(watchState, sessionStatus, nowMs) {
+        WatchDashboardPresentation.resolve(watchState, sessionStatus, nowMs)
+    }
+
+    LaunchedEffect(uiModel.needsTicker, watchState.lastHeartRateTimestampMs) {
         nowMs = System.currentTimeMillis()
-        if (!needsTicker) return@LaunchedEffect
+        if (!uiModel.needsTicker) return@LaunchedEffect
         while (true) {
             delay(1000L)
             nowMs = System.currentTimeMillis()
         }
     }
 
-    val hrStatus = com.valpr.bikecompanion.wearable.PhoneWearableManager.resolveWatchHrStatus(watchState, nowMs)
-    val isConnected = watchState.isConnected
+    val isConnected = uiModel.isConnected
     val containerColor = if (isConnected) {
-        Color(
-            0xFF00331C
-        )
+        Color(0xFF00331C)
     } else {
         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
     }
@@ -569,37 +623,44 @@ private fun PixelWatchStatusCard(
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.Watch, contentDescription = null, tint = iconColor, modifier = Modifier.size(20.dp))
-            Spacer(modifier = Modifier.width(10.dp))
-            val title = if (isConnected) {
-                "${watchState.nodeName} Connected"
-            } else {
-                "Pixel Watch: Standby"
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Watch, contentDescription = null, tint = iconColor, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(if (isConnected) Color(0xFF00E676) else Color(0xFF757575), CircleShape)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    uiModel.title,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
-            Text(title, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-            Spacer(modifier = Modifier.weight(1f))
-            // Freshness-gated: a frozen BPM with a reachable node presents as
-            // STALE, never "Live" (lastHeartRateBpm alone cannot prove liveness).
-            val statusText = when (hrStatus) {
-                com.valpr.bikecompanion.wearable.WatchHrStatus.LIVE ->
-                    "Live HR: ${watchState.lastHeartRateBpm} BPM"
-                com.valpr.bikecompanion.wearable.WatchHrStatus.STALE -> {
-                    val ageSec = ((nowMs - watchState.lastHeartRateTimestampMs) / 1000L).coerceAtLeast(0L)
-                    "HR stale • ${ageSec}s ago"
-                }
-                com.valpr.bikecompanion.wearable.WatchHrStatus.NO_DATA -> "Waiting for watch HR…"
-                com.valpr.bikecompanion.wearable.WatchHrStatus.DISCONNECTED -> "Waiting for Watch"
+            Spacer(modifier = Modifier.width(12.dp))
+            val statusColor = when (uiModel.tone) {
+                WatchStatusTone.LIVE, WatchStatusTone.READY -> Color(0xFF00E676)
+                WatchStatusTone.WARNING -> Color(0xFFFFB300)
+                WatchStatusTone.ACQUIRING -> Color(0xFF29B6F6)
+                WatchStatusTone.MUTED -> Color.Gray
             }
-            val statusColor = when (hrStatus) {
-                com.valpr.bikecompanion.wearable.WatchHrStatus.LIVE -> Color(0xFF00E676)
-                com.valpr.bikecompanion.wearable.WatchHrStatus.STALE -> Color(0xFFFFB300)
-                else -> Color.Gray
+            val fontWeight = when (uiModel.tone) {
+                WatchStatusTone.LIVE -> FontWeight.Bold
+                WatchStatusTone.READY -> FontWeight.Medium
+                else -> FontWeight.Normal
             }
             Text(
-                statusText,
+                uiModel.statusText,
                 fontSize = 11.sp,
                 color = statusColor,
-                fontWeight = if (hrStatus == com.valpr.bikecompanion.wearable.WatchHrStatus.LIVE) FontWeight.Bold else FontWeight.Normal
+                fontWeight = fontWeight,
+                maxLines = 1
             )
         }
     }
@@ -727,7 +788,7 @@ internal fun BeginnerPathCard(
                         .clickable(onClick = onToggleCollapsed)
                 ) {
                     Text(
-                        "NEW TO BIKING? START HERE",
+                        "NEW TO BIKING?",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF00E676),
@@ -865,7 +926,7 @@ internal fun BeginnerPathCard(
 }
 
 @Composable
-private fun WorkoutItemCard(header: CachedWorkoutHeader, onClick: () -> Unit, onDelete: () -> Unit) {
+internal fun WorkoutItemCard(header: CachedWorkoutHeader, onClick: () -> Unit, onDelete: () -> Unit) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         shape = RoundedCornerShape(10.dp),
@@ -903,7 +964,7 @@ private fun WorkoutItemCard(header: CachedWorkoutHeader, onClick: () -> Unit, on
                         fontWeight = FontWeight.SemiBold
                     )
                     if (header.author.isNotBlank()) {
-                        Text(header.author, fontSize = 12.sp, color = Color.Gray)
+                        Text("By ${header.author}", fontSize = 12.sp, color = Color.Gray)
                     }
                 }
             }
@@ -912,12 +973,40 @@ private fun WorkoutItemCard(header: CachedWorkoutHeader, onClick: () -> Unit, on
                 Icon(
                     Icons.Default.Delete,
                     contentDescription = "Delete",
-                    tint = Color.Gray,
+                    tint = Color(0xFFFF5252),
                     modifier = Modifier.size(18.dp)
                 )
             }
         }
     }
+}
+
+@Composable
+internal fun DeleteWorkoutDialog(
+    workoutName: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete Workout") },
+        text = {
+            Text("Are you sure you want to delete \"$workoutName\"?")
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F))
+            ) {
+                Text("Delete", color = Color.White)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable

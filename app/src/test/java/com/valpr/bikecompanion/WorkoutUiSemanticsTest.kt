@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -14,9 +15,12 @@ import com.valpr.bikecompanion.data.BikeTelemetry
 import com.valpr.bikecompanion.data.UserProfile
 import com.valpr.bikecompanion.engine.ErgController
 import com.valpr.bikecompanion.ui.dashboard.ActiveWorkoutCard
+import com.valpr.bikecompanion.ui.dashboard.DeleteWorkoutDialog
+import com.valpr.bikecompanion.ui.dashboard.WorkoutItemCard
 import com.valpr.bikecompanion.ui.summary.WorkoutSummaryScreen
 import com.valpr.bikecompanion.ui.workout.ActiveWorkoutScreen
 import com.valpr.bikecompanion.wearable.WearableWatchState
+import com.valpr.bikecompanion.workout.CachedWorkoutHeader
 import com.valpr.bikecompanion.workout.SessionStatus
 import com.valpr.bikecompanion.workout.Workout
 import com.valpr.bikecompanion.workout.WorkoutSegment
@@ -29,6 +33,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestScope
 import org.junit.After
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -375,6 +381,73 @@ class WorkoutUiSemanticsTest {
         // Navigate away (dispose ActiveWorkoutScreen)
         showScreen = false
         composeRule.waitForIdle()
-        org.junit.Assert.assertFalse(hostView.keepScreenOn)
+        assertFalse(hostView.keepScreenOn)
+    }
+
+    @Test
+    fun deleteWorkoutDialog_displaysWarningAndDispatchesConfirm() {
+        var confirmed = false
+        var dismissed = false
+
+        composeRule.setContent {
+            DeleteWorkoutDialog(
+                workoutName = "VO2 Max Blast",
+                onConfirm = { confirmed = true },
+                onDismiss = { dismissed = true }
+            )
+        }
+
+        composeRule.onNodeWithText("Delete Workout").assertIsDisplayed()
+        composeRule.onNodeWithText("Are you sure you want to delete \"VO2 Max Blast\"?").assertIsDisplayed()
+
+        composeRule.onNodeWithText("Delete").performClick()
+        assertTrue(confirmed)
+        assertFalse(dismissed)
+    }
+
+    @Test
+    fun deleteWorkoutDialog_cancelDispatchesDismiss() {
+        var confirmed = false
+        var dismissed = false
+
+        composeRule.setContent {
+            DeleteWorkoutDialog(
+                workoutName = "VO2 Max Blast",
+                onConfirm = { confirmed = true },
+                onDismiss = { dismissed = true }
+            )
+        }
+
+        composeRule.onNodeWithText("Cancel").performClick()
+        assertFalse(confirmed)
+        assertTrue(dismissed)
+    }
+
+    @Test
+    fun workoutItemCard_clickDeleteDispatchesCallback() {
+        var clicked = false
+        var deleted = false
+        val header = CachedWorkoutHeader(
+            filename = "sample.zwo",
+            name = "Test Workout",
+            author = "Coach",
+            description = "Test description",
+            durationSeconds = 1200,
+            estimatedTss = 45.0,
+            fileSizeBytes = 1024L,
+            lastModifiedMs = 1000L
+        )
+
+        composeRule.setContent {
+            WorkoutItemCard(
+                header = header,
+                onClick = { clicked = true },
+                onDelete = { deleted = true }
+            )
+        }
+
+        composeRule.onNodeWithContentDescription("Delete").performClick()
+        assertTrue(deleted)
+        assertFalse(clicked)
     }
 }

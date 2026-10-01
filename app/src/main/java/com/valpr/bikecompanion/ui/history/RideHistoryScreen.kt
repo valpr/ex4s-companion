@@ -277,7 +277,7 @@ internal fun CompactHistoryEntry(
                     if (rideCount > 0) {
                         "$rideCount rides • Last: ${lastRideName ?: "—"}"
                     } else {
-                        "Past rides, bests and TCX export"
+                        "See past rides/export"
                     },
                     fontSize = 12.sp,
                     color = Color.Gray
