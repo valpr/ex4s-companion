@@ -123,6 +123,18 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun setBeginnerPathDismissed(dismissed: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            userProfileRepo.updateBeginnerPathDismissed(dismissed)
+        }
+    }
+
+    fun setBeginnerPathCollapsed(collapsed: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            userProfileRepo.updateBeginnerPathCollapsed(collapsed)
+        }
+    }
+
     fun clearError() {
         _errorMessage.value = null
     }

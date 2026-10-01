@@ -2,6 +2,7 @@ package com.valpr.bikecompanion.ui.dashboard
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,7 +26,10 @@ import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Watch
@@ -343,12 +347,24 @@ fun DashboardScreen(
                 )
             }
 
-            // 4. Beginner Path (graduated recommendations for brand-new riders)
-            item {
-                BeginnerPathCard(
-                    cachedWorkouts = cachedWorkouts,
-                    onLevelClick = { filename -> viewModel.selectWorkoutForPreview(filename) }
-                )
+            // 4. Beginner Path (graduated recommendations for brand-new riders).
+            // Dismissable for experienced riders; a compact restore row brings it back.
+            if (userProfile.beginnerPathDismissed) {
+                item {
+                    BeginnerPathRestoreRow(
+                        onRestore = { viewModel.setBeginnerPathDismissed(false) }
+                    )
+                }
+            } else {
+                item {
+                    BeginnerPathCard(
+                        cachedWorkouts = cachedWorkouts,
+                        isCollapsed = userProfile.beginnerPathCollapsed,
+                        onToggleCollapsed = { viewModel.setBeginnerPathCollapsed(!userProfile.beginnerPathCollapsed) },
+                        onDismiss = { viewModel.setBeginnerPathDismissed(true) },
+                        onLevelClick = { filename -> viewModel.selectWorkoutForPreview(filename) }
+                    )
+                }
             }
 
             // 5. Workout Library Header
@@ -609,7 +625,24 @@ private fun QuickStartCard(enabled: Boolean, onStartFreeRide: () -> Unit) {
 }
 
 @Composable
-private fun BeginnerPathCard(cachedWorkouts: List<CachedWorkoutHeader>, onLevelClick: (String) -> Unit) {
+internal fun BeginnerPathRestoreRow(onRestore: () -> Unit) {
+    OutlinedButton(
+        onClick = onRestore,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text("New to biking? Show Beginner Path", fontSize = 12.sp)
+    }
+}
+
+@Composable
+internal fun BeginnerPathCard(
+    cachedWorkouts: List<CachedWorkoutHeader>,
+    onLevelClick: (String) -> Unit,
+    isCollapsed: Boolean = false,
+    onToggleCollapsed: () -> Unit = {},
+    onDismiss: () -> Unit = {}
+) {
     val headersByFile = remember(cachedWorkouts) {
         cachedWorkouts.associateBy { it.filename.lowercase() }
     }
@@ -627,112 +660,144 @@ private fun BeginnerPathCard(cachedWorkouts: List<CachedWorkoutHeader>, onLevelC
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            Text(
-                "NEW TO BIKING? START HERE",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF00E676),
-                letterSpacing = 1.sp
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "Beginner Path",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-            Text(
-                BeginnerPlan.PACING_GUIDANCE,
-                fontSize = 12.sp,
-                color = Color(0xFFB0BEC5)
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            BeginnerPlan.LEVELS.forEach { level ->
-                val header = headersByFile[level.filename.lowercase()]
-                val isRecommended = level.filename.equals(recommended.filename, ignoreCase = true)
-                Row(
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = header != null) { onLevelClick(level.filename) }
-                        .padding(vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .weight(1f)
+                        .clickable(onClick = onToggleCollapsed)
                 ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .background(Color(0xFF00E676), CircleShape)
-                    ) {
-                        Text(
-                            "${level.level}",
-                            fontWeight = FontWeight.Black,
-                            fontSize = 16.sp,
-                            color = Color.Black
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                level.title,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = Color.White
-                            )
-                            if (isRecommended && header != null) {
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier
-                                        .background(Color(0xFF00E676), RoundedCornerShape(4.dp))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        "START HERE",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.Black
-                                    )
-                                }
-                            }
-                        }
-                        Text(
-                            level.focus,
-                            fontSize = 12.sp,
-                            color = Color(0xFFB0BEC5)
-                        )
-                        if (header != null) {
-                            val minutes = header.durationSeconds / 60
-                            Text(
-                                "$minutes min • TSS %.0f".format(header.estimatedTss),
-                                fontSize = 11.sp,
-                                color = Color(0xFF00E676),
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        } else {
-                            Text(
-                                "Loading…",
-                                fontSize = 11.sp,
-                                color = Color.Gray
-                            )
-                        }
-                    }
+                    Text(
+                        "NEW TO BIKING? START HERE",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF00E676),
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Beginner Path",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+
+                IconButton(onClick = onToggleCollapsed) {
                     Icon(
-                        Icons.Default.PlayArrow,
-                        contentDescription = "Start ${level.title}",
-                        tint = if (header != null) Color(0xFF00E676) else Color.Gray
+                        imageVector = if (isCollapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
+                        contentDescription = if (isCollapsed) "Expand Beginner Path" else "Collapse Beginner Path",
+                        tint = Color(0xFF00E676)
+                    )
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Hide Beginner Path",
+                        tint = Color(0xFF78909C)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "Graduation: Sweet Spot Intervals (30 min) (${BeginnerPlan.PACING_TIMELINE}). Easy efforts first — fitness builds week to week.",
-                fontSize = 11.sp,
-                color = Color(0xFF78909C)
-            )
+            AnimatedVisibility(visible = !isCollapsed) {
+                Column {
+                    Text(
+                        BeginnerPlan.PACING_GUIDANCE,
+                        fontSize = 12.sp,
+                        color = Color(0xFFB0BEC5)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    BeginnerPlan.LEVELS.forEach { level ->
+                        val header = headersByFile[level.filename.lowercase()]
+                        val isRecommended = level.filename.equals(recommended.filename, ignoreCase = true)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = header != null) { onLevelClick(level.filename) }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(Color(0xFF00E676), CircleShape)
+                            ) {
+                                Text(
+                                    "${level.level}",
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 16.sp,
+                                    color = Color.Black
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        level.title,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = Color.White
+                                    )
+                                    if (isRecommended && header != null) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier
+                                                .background(Color(0xFF00E676), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                "START HERE",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.Black
+                                            )
+                                        }
+                                    }
+                                }
+                                Text(
+                                    level.focus,
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFB0BEC5)
+                                )
+                                if (header != null) {
+                                    val minutes = header.durationSeconds / 60
+                                    Text(
+                                        "$minutes min • TSS %.0f".format(header.estimatedTss),
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF00E676),
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                } else {
+                                    Text(
+                                        "Loading…",
+                                        fontSize = 11.sp,
+                                        color = Color.Gray
+                                    )
+                                }
+                            }
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = "Start ${level.title}",
+                                tint = if (header != null) Color(0xFF00E676) else Color.Gray
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Graduation: Sweet Spot Intervals (30 min) (${BeginnerPlan.PACING_TIMELINE}). Easy efforts first — fitness builds week to week.",
+                        fontSize = 11.sp,
+                        color = Color(0xFF78909C)
+                    )
+                }
+            }
         }
     }
 }
