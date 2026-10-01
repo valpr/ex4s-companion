@@ -98,4 +98,25 @@ class AthleteStatsUiTest {
         }
         composeRule.onNodeWithText("Power settings saved").assertIsDisplayed()
     }
+
+    @Test
+    fun calcFromAge_updatesMaxAndCriticalHeartRate() {
+        val app = ApplicationProvider.getApplicationContext<BikeApplication>()
+        val viewModel = AthleteStatsViewModel(app)
+
+        composeRule.setContent {
+            AthleteStatsScreen(
+                viewModel = viewModel,
+                onNavigateBack = {}
+            )
+        }
+
+        // Tapping "Calc from Age" calculates Max HR and ties Critical HR (95%)
+        composeRule.onNodeWithText("Calc from Age").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        // Age 30 Male default: Tanaka Max HR = 187, Critical HR = 187 * 0.95 = 178
+        composeRule.onNodeWithText("187").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("178").performScrollTo().assertIsDisplayed()
+    }
 }

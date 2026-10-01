@@ -19,6 +19,15 @@ class AthleteMetricsTest {
     }
 
     @Test
+    fun testCriticalHrFormula() {
+        // 95% of Max HR: allows Zone 5 intervals while providing safety derating against supra-maximal strain
+        assertEquals(181, AthleteMetrics.recommendCriticalHr(190))
+        assertEquals(190, AthleteMetrics.recommendCriticalHr(200))
+        assertEquals(171, AthleteMetrics.recommendCriticalHr(180))
+        assertEquals(162, AthleteMetrics.recommendCriticalHr(170))
+    }
+
+    @Test
     fun testWattsPerKgAndCategory() {
         val wkg = AthleteMetrics.calculateWattsPerKg(250, 75.0f)
         assertEquals(3.333f, wkg, 0.01f)

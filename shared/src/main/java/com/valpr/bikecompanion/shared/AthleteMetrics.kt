@@ -103,6 +103,12 @@ object AthleteMetrics {
         BiologicalSex.MALE -> estimateMaxHrTanaka(age)
     }
 
+    /**
+     * Recommends Critical Safety Heart Rate threshold (default 95% of Max HR).
+     * Provides headroom for high-intensity Zone 5 intervals while protecting against supra-maximal strain.
+     */
+    fun recommendCriticalHr(maxHr: Int): Int = (maxHr.coerceAtLeast(1) * 0.95f).roundToInt()
+
     // --- Power & W/kg Calculations ---
 
     /**

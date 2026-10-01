@@ -32,7 +32,7 @@ data class UserProfile(
     val ergKp: Float = 0.05f,
     val ergKi: Float = 0.01f,
     val maxHeartRate: Int = 190,
-    val criticalHeartRate: Int = 175,
+    val criticalHeartRate: Int = 181,
     val age: Int = 30,
     val heightCm: Float = 175.0f,
     val biologicalSex: BiologicalSex = BiologicalSex.MALE,
@@ -115,7 +115,7 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
         const val DEFAULT_KP = 0.05f
         const val DEFAULT_KI = 0.01f
         const val DEFAULT_MAX_HR = 190
-        const val DEFAULT_CRITICAL_HR = 175
+        const val DEFAULT_CRITICAL_HR = 181
         const val DEFAULT_AGE = 30
         const val DEFAULT_HEIGHT_CM = 175.0f
         val DEFAULT_SEX = BiologicalSex.MALE

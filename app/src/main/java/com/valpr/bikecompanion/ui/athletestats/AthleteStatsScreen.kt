@@ -507,6 +507,8 @@ fun AthleteStatsScreen(
                                 val enteredAge = ageInput.toIntOrNull() ?: profile.age
                                 val recommended = AthleteMetrics.recommendMaxHr(enteredAge, selectedSex)
                                 maxHrInput = recommended.toString()
+                                val recommendedCrit = AthleteMetrics.recommendCriticalHr(recommended)
+                                criticalHrInput = recommendedCrit.toString()
                             },
                             shape = RoundedCornerShape(8.dp)
                         ) {
@@ -551,8 +553,13 @@ fun AthleteStatsScreen(
                         value = criticalHrInput,
                         onValueChange = { criticalHrInput = it },
                         label = { Text("Critical Safety HR Alert (BPM)") },
-                        placeholder = { Text("175") },
-                        supportingText = { Text("Triggers dynamic 10% FTP derating & watch haptic", fontSize = 11.sp) },
+                        placeholder = { Text("181") },
+                        supportingText = {
+                            Text(
+                                "Triggers dynamic 10% FTP derating & watch haptic (recommended: 95% of Max HR)",
+                                fontSize = 11.sp
+                            )
+                        },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
