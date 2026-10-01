@@ -110,8 +110,9 @@ This document contains mandatory guidelines, invariants, and hard-learned lesson
 ## 7. Linting, Formatting & Code Quality Invariants
 * **Line Ending Discipline on Windows:**
   * Spotless must remain configured with `LineEnding.UNIX` and paired with `.gitattributes` (`* text=auto eol=lf`). On Windows, default Spotless behavior converts `\n` to `\r\n`, creating massive false-positive diff churn across checkouts.
-* **Windows Drive Delimiter in `.properties` Files (`PropertyEscape`):**
-  * In `.properties` files (like `gradle.properties`), Windows drive colons must be escaped: `org.gradle.java.home=C\:/Program Files/...`. An unescaped `:` acts as a key-value delimiter in standard Java properties and immediately fails Android Lint with `[PropertyEscape]`.
+* **No Machine-Specific Paths in Repository `.properties` Files:**
+  * Machine-specific properties like `org.gradle.java.home` must never be committed to project `gradle.properties`. Instead, configure them via the `JAVA_HOME` environment variable or user-level `~/.gradle/gradle.properties` (`%USERPROFILE%\.gradle\gradle.properties` on Windows).
+  * If a property with Windows drive colons is used in any `.properties` file, colons must be escaped (`C\:/...`) to avoid Android Lint `[PropertyEscape]`.
 * **Wear Capabilities `UnusedResources` False Positive:**
   * `res/values/wear.xml` defining `android_wear_capabilities` is consumed dynamically by Google Play Services / Wear OS capability discovery at runtime, not referenced as an `R.array` symbol in Kotlin code. Android Lint flags this as `UnusedResources`. It must remain explicitly suppressed in `lint.xml`.
 * **Jetpack Compose & StateFlow Naming Discipline:**
