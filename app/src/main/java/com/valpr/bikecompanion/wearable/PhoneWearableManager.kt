@@ -27,14 +27,36 @@ import kotlinx.coroutines.launch
 
 /**
  * Live connection state for the paired Wear OS (Pixel Watch) device.
+ *
+ * Freshness invariant: [lastHeartRateBpm] is the last value received and never
+ * decays on its own — callers must consult [lastHeartRateTimestampMs] via
+ * [PhoneWearableManager.resolveWatchHrStatus] before presenting it as live.
  */
 data class WearableWatchState(
     val isConnected: Boolean = false,
     val nodeName: String = "",
     val nodeId: String = "",
     val lastHeartRateBpm: Int = 0,
+    /** Phone receipt time (see [PhoneWearableManager.clock]) of the last HR batch. */
     val lastHeartRateTimestampMs: Long = 0L
 )
+
+/**
+ * Freshness of watch heart-rate data for UI presentation.
+ */
+enum class WatchHrStatus {
+    /** Node reachable and HR batch received within [PhoneWearableManager.HR_STALE_THRESHOLD_MS]. */
+    LIVE,
+
+    /** Node reachable but no HR batch within the threshold — value on screen is frozen. */
+    STALE,
+
+    /** Node reachable but no HR batch ever received in this session. */
+    NO_DATA,
+
+    /** No reachable watch node. */
+    DISCONNECTED
+}
 
 /**
  * Manages communication between the phone and Pixel Watch via Google Play Services Wearable.
@@ -55,6 +77,30 @@ class PhoneWearableManager(
     companion object {
         private const val TAG = "PhoneWearableManager"
         private const val NODE_REFRESH_INTERVAL_MS = 15_000L
+
+        /**
+         * HR is LIVE while a batch arrived within this window. Grounded in the
+         * watch batch cadence (2–3s active, 5–10s ambient): 12s tolerates an
+         * ambient batch plus radio jitter without crying stale.
+         */
+        const val HR_STALE_THRESHOLD_MS = 12_000L
+
+        /**
+         * Pure freshness resolver (JVM-testable): node reachability alone never
+         * implies live data — a reachable watch with a frozen [WearableWatchState]
+         * must present STALE, never LIVE.
+         */
+        fun resolveWatchHrStatus(state: WearableWatchState, nowMs: Long): WatchHrStatus {
+            if (!state.isConnected) return WatchHrStatus.DISCONNECTED
+            if (state.lastHeartRateTimestampMs <= 0L || state.lastHeartRateBpm <= 0) {
+                return WatchHrStatus.NO_DATA
+            }
+            return if (nowMs - state.lastHeartRateTimestampMs <= HR_STALE_THRESHOLD_MS) {
+                WatchHrStatus.LIVE
+            } else {
+                WatchHrStatus.STALE
+            }
+        }
     }
 
     private val messageClient: MessageClient by lazy {
@@ -181,10 +227,12 @@ class PhoneWearableManager(
 
         when (val action = PhoneWearableRouter.route(messageEvent.path, messageEvent.data)) {
             is PhoneWearableRouter.Action.ForwardHeartRate -> {
+                // Stamp phone receipt time (clock, not the watch batch timestamp)
+                // so freshness is immune to watch/phone clock skew.
                 _watchState.update {
                     it.copy(
                         lastHeartRateBpm = action.bpm,
-                        lastHeartRateTimestampMs = action.timestampMs
+                        lastHeartRateTimestampMs = clock()
                     )
                 }
                 // Forward to WorkoutSessionManager for dynamic capping and UI

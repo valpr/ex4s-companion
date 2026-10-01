@@ -72,12 +72,16 @@ fun MainNavigation(onRequestPermissions: () -> Unit, modifier: Modifier = Modifi
             val userProfile by app.userProfileRepository.userProfileFlow.collectAsState(
                 initial = UserProfile()
             )
+            val watchState by app.phoneWearableManager.watchState.collectAsState(
+                initial = com.valpr.bikecompanion.wearable.WearableWatchState()
+            )
             ActiveWorkoutScreen(
                 sessionManager = sessionManager,
                 onFinish = {
                     currentScreen = AppScreen.WORKOUT_SUMMARY
                 },
                 keepScreenOn = userProfile.keepScreenOn,
+                watchState = watchState,
                 modifier = modifier
             )
         }

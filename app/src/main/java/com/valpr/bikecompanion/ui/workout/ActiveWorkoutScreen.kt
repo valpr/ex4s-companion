@@ -45,8 +45,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,9 +65,13 @@ import com.valpr.bikecompanion.engine.ErgState
 import com.valpr.bikecompanion.shared.CadenceEvaluator
 import com.valpr.bikecompanion.shared.CadenceState
 import com.valpr.bikecompanion.ui.components.WorkoutCanvasProfile
+import com.valpr.bikecompanion.wearable.PhoneWearableManager
+import com.valpr.bikecompanion.wearable.WatchHrStatus
+import com.valpr.bikecompanion.wearable.WearableWatchState
 import com.valpr.bikecompanion.workout.SessionStatus
 import com.valpr.bikecompanion.workout.WorkoutSessionManager
 import com.valpr.bikecompanion.workout.WorkoutSessionState
+import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -72,7 +80,8 @@ fun ActiveWorkoutScreen(
     sessionManager: WorkoutSessionManager,
     onFinish: () -> Unit,
     modifier: Modifier = Modifier,
-    keepScreenOn: Boolean = true
+    keepScreenOn: Boolean = true,
+    watchState: WearableWatchState = WearableWatchState()
 ) {
     val sessionState by sessionManager.sessionState.collectAsState()
     val configuration = LocalConfiguration.current
@@ -94,13 +103,15 @@ fun ActiveWorkoutScreen(
             LandscapeWorkoutContent(
                 state = sessionState,
                 sessionManager = sessionManager,
-                onFinish = onFinish
+                onFinish = onFinish,
+                watchState = watchState
             )
         } else {
             PortraitWorkoutContent(
                 state = sessionState,
                 sessionManager = sessionManager,
-                onFinish = onFinish
+                onFinish = onFinish,
+                watchState = watchState
             )
         }
     }
@@ -110,7 +121,8 @@ fun ActiveWorkoutScreen(
 private fun PortraitWorkoutContent(
     state: WorkoutSessionState,
     sessionManager: WorkoutSessionManager,
-    onFinish: () -> Unit
+    onFinish: () -> Unit,
+    watchState: WearableWatchState = WearableWatchState()
 ) {
     Column(
         modifier = Modifier
@@ -122,11 +134,14 @@ private fun PortraitWorkoutContent(
         // Header & Status
         WorkoutHeaderBar(state = state)
 
+        // Watch HR link status (live / stale / disconnected)
+        WatchHrStatusRow(watchState = watchState)
+
         // Active Coaching Cue Banner
         CoachingCueBanner(state = state)
 
         // The Big Three (Power, Cadence, HR/Resistance)
-        TheBigThree(state = state)
+        TheBigThree(state = state, watchState = watchState)
 
         if (state.workout != null) {
             // Target vs Actual Gauge
@@ -163,7 +178,8 @@ private fun PortraitWorkoutContent(
 private fun LandscapeWorkoutContent(
     state: WorkoutSessionState,
     sessionManager: WorkoutSessionManager,
-    onFinish: () -> Unit
+    onFinish: () -> Unit,
+    watchState: WearableWatchState = WearableWatchState()
 ) {
     Row(
         modifier = Modifier
@@ -179,7 +195,8 @@ private fun LandscapeWorkoutContent(
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             WorkoutHeaderBar(state = state)
-            TheBigThree(state = state)
+            WatchHrStatusRow(watchState = watchState)
+            TheBigThree(state = state, watchState = watchState)
             if (state.workout != null) {
                 ClutchButton(state = state, onToggleClutch = { sessionManager.toggleClutch() })
             } else {
@@ -261,6 +278,67 @@ private fun WorkoutHeaderBar(state: WorkoutSessionState) {
 }
 
 @Composable
+internal fun WatchHrStatusRow(watchState: WearableWatchState, modifier: Modifier = Modifier) {
+    // 1s ticker so LIVE flips to STALE even when no new batches arrive to
+    // trigger recomposition. Gated to the only case that changes with time.
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val needsTicker = watchState.isConnected && watchState.lastHeartRateTimestampMs > 0L
+    LaunchedEffect(needsTicker, watchState.lastHeartRateTimestampMs) {
+        nowMs = System.currentTimeMillis()
+        if (!needsTicker) return@LaunchedEffect
+        while (true) {
+            delay(1000L)
+            nowMs = System.currentTimeMillis()
+        }
+    }
+
+    val status = PhoneWearableManager.resolveWatchHrStatus(watchState, nowMs)
+    val (dotColor, text, textColor) = when (status) {
+        WatchHrStatus.LIVE -> Triple(
+            Color(0xFF00E676),
+            "${watchState.nodeName.ifBlank { "Watch" }} • Live HR",
+            Color(0xFF00E676)
+        )
+        WatchHrStatus.STALE -> {
+            val ageSec = ((nowMs - watchState.lastHeartRateTimestampMs) / 1000L).coerceAtLeast(0L)
+            Triple(
+                Color(0xFFFFB300),
+                "HR stale • last update ${ageSec}s ago",
+                Color(0xFFFFB300)
+            )
+        }
+        WatchHrStatus.NO_DATA -> Triple(
+            Color(0xFF29B6F6),
+            "${watchState.nodeName.ifBlank { "Watch" }} connected • waiting for HR…",
+            Color(0xFFB0BEC5)
+        )
+        WatchHrStatus.DISCONNECTED -> Triple(
+            Color(0xFF666666),
+            "Watch disconnected",
+            Color(0xFF888888)
+        )
+    }
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .background(dotColor, CircleShape)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = text,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = textColor
+        )
+    }
+}
+
+@Composable
 private fun CoachingCueBanner(state: WorkoutSessionState) {
     AnimatedVisibility(
         visible = state.activeCues.isNotEmpty(),
@@ -285,7 +363,7 @@ private fun CoachingCueBanner(state: WorkoutSessionState) {
 }
 
 @Composable
-private fun TheBigThree(state: WorkoutSessionState) {
+private fun TheBigThree(state: WorkoutSessionState, watchState: WearableWatchState = WearableWatchState()) {
     val telem = state.latestTelemetry
     val targetWatts = state.targetWatts
 
@@ -337,16 +415,30 @@ private fun TheBigThree(state: WorkoutSessionState) {
                 state.currentHeartRate,
                 state.athleteMaxHr
             )
+            // A frozen HR number must never present as live: dim the tile and
+            // qualify it whenever the link is not actively delivering batches
+            // (STALE after the threshold, OFFLINE once the node drops).
+            val hrStatus = PhoneWearableManager.resolveWatchHrStatus(
+                watchState,
+                System.currentTimeMillis()
+            )
+            val hrQualifier = when (hrStatus) {
+                WatchHrStatus.STALE -> "STALE"
+                WatchHrStatus.DISCONNECTED -> "OFFLINE"
+                else -> null
+            }
             val hrColor = when {
+                hrQualifier != null -> Color(0xFF888888)
                 state.isCriticalHrActive -> Color(0xFFFF1744) // Critical Alert Red
                 zone >= 5 -> Color(0xFFFF5252) // Zone 5 / Max Effort
                 zone == 4 -> Color(0xFFFFAB00) // Zone 4 / Threshold
                 zone == 3 -> Color(0xFF00E676) // Zone 3 / Tempo
                 else -> Color(0xFF29B6F6) // Zone 1-2 / Aerobic
             }
-            val targetLabel = if (state.isCriticalHrActive) "CRITICAL CAPPED" else "L${telem.resistanceLevel} • %.0f km/h".format(telem.speedKmh)
+            val baseLabel = if (state.isCriticalHrActive) "CRITICAL CAPPED" else "L${telem.resistanceLevel} • %.0f km/h".format(telem.speedKmh)
+            val targetLabel = if (hrQualifier != null) "$hrQualifier • $baseLabel" else baseLabel
             BigMetricTile(
-                label = "HEART RATE",
+                label = if (hrQualifier != null) "HEART RATE ($hrQualifier)" else "HEART RATE",
                 value = "${state.currentHeartRate}",
                 unit = "BPM",
                 target = targetLabel,

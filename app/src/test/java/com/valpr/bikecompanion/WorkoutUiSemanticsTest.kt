@@ -16,6 +16,7 @@ import com.valpr.bikecompanion.engine.ErgController
 import com.valpr.bikecompanion.ui.dashboard.ActiveWorkoutCard
 import com.valpr.bikecompanion.ui.summary.WorkoutSummaryScreen
 import com.valpr.bikecompanion.ui.workout.ActiveWorkoutScreen
+import com.valpr.bikecompanion.wearable.WearableWatchState
 import com.valpr.bikecompanion.workout.SessionStatus
 import com.valpr.bikecompanion.workout.Workout
 import com.valpr.bikecompanion.workout.WorkoutSegment
@@ -171,6 +172,92 @@ class WorkoutUiSemanticsTest {
         }
 
         composeRule.onNodeWithText("TARGET 80").assertIsDisplayed()
+    }
+
+    @Test
+    fun watchHrStale_marksHrTileAndStatusRow() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+        manager.updateHeartRate(100)
+        val staleWatch = WearableWatchState(
+            isConnected = true,
+            nodeName = "Pixel Watch 3",
+            nodeId = "node-1",
+            lastHeartRateBpm = 100,
+            lastHeartRateTimestampMs = System.currentTimeMillis() - 60_000L
+        )
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {}, watchState = staleWatch)
+        }
+
+        composeRule.onNodeWithText("HR stale", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("HEART RATE (STALE)").assertIsDisplayed()
+    }
+
+    @Test
+    fun watchHrLive_showsLiveStatusRow() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+        manager.updateHeartRate(100)
+        val liveWatch = WearableWatchState(
+            isConnected = true,
+            nodeName = "Pixel Watch 3",
+            nodeId = "node-1",
+            lastHeartRateBpm = 100,
+            lastHeartRateTimestampMs = System.currentTimeMillis()
+        )
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {}, watchState = liveWatch)
+        }
+
+        composeRule.onNodeWithText("Live HR", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("HEART RATE").assertIsDisplayed()
+        composeRule.onNodeWithText("HEART RATE (STALE)").assertDoesNotExist()
+    }
+
+    @Test
+    fun watchDisconnected_showsDisconnectedStatusRow() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(
+                sessionManager = manager,
+                onFinish = {},
+                watchState = WearableWatchState(isConnected = false)
+            )
+        }
+
+        composeRule.onNodeWithText("Watch disconnected").assertIsDisplayed()
+    }
+
+    @Test
+    fun watchDisconnected_withFrozenHr_marksTileOffline() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+        manager.updateHeartRate(100)
+        // Node dropped after delivering HR: bpm/timestamp retained, link gone.
+        val offlineWatch = WearableWatchState(
+            isConnected = false,
+            nodeName = "",
+            nodeId = "",
+            lastHeartRateBpm = 100,
+            lastHeartRateTimestampMs = System.currentTimeMillis()
+        )
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {}, watchState = offlineWatch)
+        }
+
+        composeRule.onNodeWithText("Watch disconnected").assertIsDisplayed()
+        composeRule.onNodeWithText("HEART RATE (OFFLINE)").assertIsDisplayed()
+        composeRule.onNodeWithText("HEART RATE (STALE)").assertDoesNotExist()
     }
 
     @Test

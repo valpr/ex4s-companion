@@ -57,6 +57,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -76,6 +77,7 @@ import com.valpr.bikecompanion.workout.CachedWorkoutHeader
 import com.valpr.bikecompanion.workout.SessionStatus
 import com.valpr.bikecompanion.workout.Workout
 import com.valpr.bikecompanion.workout.WorkoutSessionState
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -502,6 +504,20 @@ private fun PixelWatchStatusCard(
     watchState: com.valpr.bikecompanion.wearable.WearableWatchState,
     onRefresh: () -> Unit = {}
 ) {
+    // 1s ticker so LIVE flips to STALE even when no new batches arrive to
+    // trigger recomposition. Gated to the only case that changes with time.
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val needsTicker = watchState.isConnected && watchState.lastHeartRateTimestampMs > 0L
+    LaunchedEffect(needsTicker, watchState.lastHeartRateTimestampMs) {
+        nowMs = System.currentTimeMillis()
+        if (!needsTicker) return@LaunchedEffect
+        while (true) {
+            delay(1000L)
+            nowMs = System.currentTimeMillis()
+        }
+    }
+
+    val hrStatus = com.valpr.bikecompanion.wearable.PhoneWearableManager.resolveWatchHrStatus(watchState, nowMs)
     val isConnected = watchState.isConnected
     val containerColor = if (isConnected) {
         Color(
@@ -534,17 +550,28 @@ private fun PixelWatchStatusCard(
             }
             Text(title, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.weight(1f))
-            val statusText = when {
-                isConnected && watchState.lastHeartRateBpm > 0 -> "Live HR: ${watchState.lastHeartRateBpm} BPM"
-                isConnected -> "Health Services Ready"
-                else -> "Waiting for Watch"
+            // Freshness-gated: a frozen BPM with a reachable node presents as
+            // STALE, never "Live" (lastHeartRateBpm alone cannot prove liveness).
+            val statusText = when (hrStatus) {
+                com.valpr.bikecompanion.wearable.WatchHrStatus.LIVE ->
+                    "Live HR: ${watchState.lastHeartRateBpm} BPM"
+                com.valpr.bikecompanion.wearable.WatchHrStatus.STALE -> {
+                    val ageSec = ((nowMs - watchState.lastHeartRateTimestampMs) / 1000L).coerceAtLeast(0L)
+                    "HR stale • ${ageSec}s ago"
+                }
+                com.valpr.bikecompanion.wearable.WatchHrStatus.NO_DATA -> "Waiting for watch HR…"
+                com.valpr.bikecompanion.wearable.WatchHrStatus.DISCONNECTED -> "Waiting for Watch"
             }
-            val statusColor = if (isConnected && watchState.lastHeartRateBpm > 0) Color(0xFF00E676) else Color.Gray
+            val statusColor = when (hrStatus) {
+                com.valpr.bikecompanion.wearable.WatchHrStatus.LIVE -> Color(0xFF00E676)
+                com.valpr.bikecompanion.wearable.WatchHrStatus.STALE -> Color(0xFFFFB300)
+                else -> Color.Gray
+            }
             Text(
                 statusText,
                 fontSize = 11.sp,
                 color = statusColor,
-                fontWeight = if (isConnected && watchState.lastHeartRateBpm > 0) FontWeight.Bold else FontWeight.Normal
+                fontWeight = if (hrStatus == com.valpr.bikecompanion.wearable.WatchHrStatus.LIVE) FontWeight.Bold else FontWeight.Normal
             )
         }
     }
