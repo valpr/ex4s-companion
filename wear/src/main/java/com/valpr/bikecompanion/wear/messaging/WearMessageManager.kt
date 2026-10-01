@@ -270,6 +270,30 @@ class WearMessageManager(
         }
     }
 
+    /**
+     * Transmits instant Pause gesture to phone (freezes the session playhead).
+     */
+    fun sendPause() {
+        val target = _phoneNodeId.value
+        if (!WearMessageRouter.canSend(target)) return
+        val nodeId = target!!
+        hapticManager.playAlert(HapticAlertType.RESUME_TRIGGERED)
+        scope.launch {
+            try {
+                Tasks.await(
+                    messageClient.sendMessage(
+                        nodeId,
+                        WearableProtocol.PATH_PAUSE_SESSION,
+                        byteArrayOf(0x01)
+                    )
+                )
+                Log.i(TAG, "Dispatched Pause to phone")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sending pause to phone: ${e.message}")
+            }
+        }
+    }
+
     fun onDestroy() {
         try {
             messageClient.removeListener(this)

@@ -14,6 +14,7 @@ object PhoneWearableRouter {
         data class ForwardHeartRate(val bpm: Int, val timestampMs: Long) : Action
         data object Clutch : Action
         data object Resume : Action
+        data object Pause : Action
         data object RequestWorkoutState : Action
         data object Ignore : Action
     }
@@ -29,6 +30,7 @@ object PhoneWearableRouter {
         }
         WearableProtocol.PATH_ROTARY_BAILOUT -> Action.Clutch
         WearableProtocol.PATH_RESUME_SLAP -> Action.Resume
+        WearableProtocol.PATH_PAUSE_SESSION -> Action.Pause
         WearableProtocol.PATH_REQUEST_STATE -> Action.RequestWorkoutState
         else -> Action.Ignore
     }

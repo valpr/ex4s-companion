@@ -37,7 +37,9 @@ fun ActiveTelemetryScreen(
     currentHeartRate: Int,
     isAmbient: Boolean,
     onBailoutTriggered: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPauseTriggered: () -> Unit = {},
+    onResumeTriggered: () -> Unit = {}
 ) {
     val hrZone = HrZone.fromBpm(currentHeartRate, workoutState.athleteMaxHr)
     val displayHr = if (currentHeartRate > 0) "$currentHeartRate" else "—"
@@ -79,6 +81,27 @@ fun ActiveTelemetryScreen(
                         color = Color.Gray,
                         maxLines = 1
                     )
+                }
+
+                // Paused cue: the timer freezes on pause, so label it —
+                // otherwise the wrist is pixel-identical to a live workout.
+                if (workoutState.isPaused) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (isAmbient) Color.DarkGray else Color(0xFF3E2700))
+                            .padding(horizontal = 10.dp, vertical = 3.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "PAUSED",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.sp,
+                            color = if (isAmbient) Color.LightGray else Color(0xFFFFB300)
+                        )
+                    }
                 }
             }
 
@@ -125,22 +148,60 @@ fun ActiveTelemetryScreen(
                 }
             }
 
-            // Bottom: Bailout Button / Rotary Crown Hint (Hidden in ambient to save pixels)
+            // Bottom: Pause/Resume + Bailout (hidden in ambient to save pixels)
             if (!isAmbient) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF261200))
-                        .clickable { onBailoutTriggered() }
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
-                    contentAlignment = Alignment.Center
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "BAILOUT ⚙",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFFFB300)
-                    )
+                    if (workoutState.isPaused) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF002B11))
+                                .clickable { onResumeTriggered() }
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "RESUME ▶",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF00E676)
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF101A30))
+                                .clickable { onPauseTriggered() }
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "PAUSE ❚❚",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF29B6F6)
+                            )
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF261200))
+                            .clickable { onBailoutTriggered() }
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "BAILOUT ⚙",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFFB300)
+                        )
+                    }
                 }
             } else {
                 Spacer(modifier = Modifier.height(16.dp))

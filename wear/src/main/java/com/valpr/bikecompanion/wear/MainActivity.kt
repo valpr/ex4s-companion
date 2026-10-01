@@ -193,7 +193,9 @@ fun WearApp(messageManager: WearMessageManager, healthServicesManager: HealthSer
                     workoutState = state,
                     currentHeartRate = if (liveHr > 0) liveHr else state.heartRateBpm,
                     isAmbient = isAmbient,
-                    onBailoutTriggered = { messageManager.sendRotaryBailout() }
+                    onBailoutTriggered = { messageManager.sendRotaryBailout() },
+                    onPauseTriggered = { messageManager.sendPause() },
+                    onResumeTriggered = { messageManager.sendResumeSlap() }
                 )
             }
 

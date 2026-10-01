@@ -47,6 +47,11 @@ android {
         checkReleaseBuilds = false
         warningsAsErrors = false
     }
+    // Required for Robolectric-hosted compose tests: AGP must pass the merged
+    // manifest + resources to the local unit-test JVM (mirrors :app).
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 dependencies {
@@ -80,4 +85,7 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.turbine)
     testImplementation(libs.androidx.compose.ui.test.junit4)
+    // Provides the test ComponentActivity for compose rules under Robolectric.
+    testImplementation(libs.androidx.ui.test.manifest)
+    debugImplementation(libs.androidx.ui.test.manifest)
 }

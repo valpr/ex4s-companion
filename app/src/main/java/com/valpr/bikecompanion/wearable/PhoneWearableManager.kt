@@ -246,7 +246,18 @@ class PhoneWearableManager(
 
             PhoneWearableRouter.Action.Resume -> {
                 Log.i(TAG, "Received Resume Slap tap command from watch")
+                // Session pause and ERG bailout are orthogonal axes: a slap
+                // while PAUSED unfreezes the playhead, and independently clears
+                // any ERG bailout. Either or both may apply.
+                if (sessionManager.sessionState.value.status == SessionStatus.PAUSED) {
+                    sessionManager.resumeWorkout()
+                }
                 sessionManager.resumeManually()
+            }
+
+            PhoneWearableRouter.Action.Pause -> {
+                Log.i(TAG, "Received Pause command from watch")
+                sessionManager.pauseWorkout()
             }
 
             PhoneWearableRouter.Action.RequestWorkoutState -> {

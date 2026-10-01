@@ -46,6 +46,10 @@ class PhoneWearableRouterTest {
             PhoneWearableRouter.route(WearableProtocol.PATH_RESUME_SLAP, byteArrayOf(0x01))
         )
         assertEquals(
+            PhoneWearableRouter.Action.Pause,
+            PhoneWearableRouter.route(WearableProtocol.PATH_PAUSE_SESSION, byteArrayOf(0x01))
+        )
+        assertEquals(
             PhoneWearableRouter.Action.RequestWorkoutState,
             PhoneWearableRouter.route(WearableProtocol.PATH_REQUEST_STATE, byteArrayOf(0x01))
         )
