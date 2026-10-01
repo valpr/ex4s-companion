@@ -119,7 +119,7 @@ This document contains mandatory guidelines, invariants, and hard-learned lesson
   * Jetpack Compose functions returning `Unit` use PascalCase (e.g., `@Composable fun ActiveTelemetryScreen(...)`). Ktlint's `standard:function-naming` must remain disabled in `.editorconfig` and `editorConfigOverride`.
   * Private `MutableStateFlow` fields must not use leading underscores (e.g. `_phoneNodeId`) unless a matching public property or getter exists, or ktlint flags `standard:backing-property-naming`.
 * **Conventional Commits Invariant:**
-  * Commits are validated by `.githooks/commit-msg` against `^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_\-\/]+\))?: .+`. Commits with vague subjects (e.g. `"wip"`, `"fixed"`) will be rejected.
+  * Commits are validated by `.githooks/commit-msg` against `^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_/-]+\))?: .+` (hyphen placed last in the class so BSD `grep` treats it literally — do not reintroduce `\-` escapes). Commits with vague subjects (e.g. `"wip"`, `"fixed"`) will be rejected.
 * **Pre-Commit Latency Discipline (< 1.5s):**
   * The `.githooks/pre-commit` hook runs exclusively on staged files (`git diff --cached`). Never invoke heavy tasks (full test suite, Android Lint, or full-project builds) in `pre-commit`. Fast checks include: merge conflict markers, secret/key leaks, and [AGENTS.md](file:///C:/Users/Andrew/lw-bike-companion/AGENTS.md) banned imports (`android.util.Log` in `:shared`, hardcoded `Dispatchers.IO` in `BleCommandQueue.kt`).
 
