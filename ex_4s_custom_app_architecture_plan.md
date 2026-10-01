@@ -197,13 +197,24 @@ The Settings UI should expose **P and I gain** sliders (not D), plus the cadence
 
 #### D.1. Permissions & Rationale Activity
 
-Required manifest permissions:
+Declared manifest permissions:
 ```xml
+<!-- Write batch permissions (post-workout batch write) -->
 <uses-permission android:name="android.permission.health.READ_EXERCISE" />
 <uses-permission android:name="android.permission.health.WRITE_EXERCISE" />
 <uses-permission android:name="android.permission.health.WRITE_HEART_RATE" />
 <uses-permission android:name="android.permission.health.WRITE_POWER" />
 <uses-permission android:name="android.permission.health.WRITE_ACTIVE_CALORIES_BURNED" />
+<uses-permission android:name="android.permission.health.WRITE_DISTANCE" />
+<uses-permission android:name="android.permission.health.WRITE_SPEED" />
+<uses-permission android:name="android.permission.health.WRITE_TOTAL_CALORIES_BURNED" />
+
+<!-- Opt-in read permissions (manual profile vitals and recovery import) -->
+<uses-permission android:name="android.permission.health.READ_WEIGHT" />
+<uses-permission android:name="android.permission.health.READ_HEIGHT" />
+<uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE" />
+<uses-permission android:name="android.permission.health.READ_SLEEP" />
+<uses-permission android:name="android.permission.health.READ_HEART_RATE_VARIABILITY" />
 ```
 
 **Mandatory rationale Activity** (required for Play Store and permission grants):
@@ -222,44 +233,43 @@ Required manifest permissions:
 
 #### D.2. Data Write Strategy: Batch on Completion
 
-**Never write to Health Connect during the workout.** It is a cold-storage database with rate limits, not a real-time bus. Buffer all data in-memory (or Room) during the workout, then batch-write on session completion:
+**Never write to Health Connect during the workout.** It is a cold-storage database with rate limits, not a real-time bus. Buffer all data in-memory during the workout, then batch-write on session completion:
 
-* 1× `ExerciseSessionRecord` (type: `EXERCISE_TYPE_BIKING_STATIONARY`)
-* 1× `HeartRateRecord` containing all `HeartRateRecord.Sample` items (≥1s window guard)
+* 1× `ExerciseSessionRecord` (type: `EXERCISE_TYPE_BIKING_STATIONARY`) with mapped interval `ExerciseSegment`s and `ExerciseLap`s
+* 1× `HeartRateRecord` containing all `HeartRateRecord.Sample` items (clamped to session window)
 * N× `PowerRecord` chunked ≤30 min (each interval clamped inside the parent session; out-of-window buckets dropped)
-* 1× `ActiveCaloriesBurnedRecord`
+* N× `SpeedRecord` chunked ≤30 min
+* N× `CyclingPedalingCadenceRecord` chunked ≤30 min
+* 1× `DistanceRecord` with session total distance in meters
+* 1× `TotalCaloriesBurnedRecord` with full mechanical work metabolic equivalent
+* 1× `ActiveCaloriesBurnedRecord` (total minus resting burn for duration)
 
-#### D.3. PowerRecord Gotchas
-* Every `PowerRecord.Sample.time` must satisfy `startTime ≤ sample.time ≤ endTime`. A single timestamp 1ms outside the window throws `IllegalArgumentException`.
-* The `PowerRecord` interval must lie within the parent `ExerciseSessionRecord` time interval.
-* For sessions > 1 hour, a single `PowerRecord` with 3,600+ samples can exceed the Binder transaction buffer (1 MB). Split into 15–30 minute chunks.
-* Use `Metadata.activelyRecorded(device = Device(type = Device.TYPE_PHONE))` (connect-client 1.1.0).
+#### D.3. Idempotent Dedup on Retry
 
-#### D.4. Calorie Calculation
+Before inserting records on `syncWorkout()`, the manager executes a pre-read query for `ExerciseSessionRecord` over `TimeRangeFilter.between(sessionStart, sessionEnd)`:
+* Each record in the batch is stamped with a deterministic `clientRecordId` (e.g. `ride_<startTimeEpochMs>`).
+* If an existing session record shares the `clientRecordId` or possesses matching `[start, end]` timestamps and title, duplicate insert is skipped and sync state transitions immediately to `Success`.
 
-Health Connect does **not** calculate calories internally — the app must compute and write the value. The industry-standard power-based approach is:
+#### D.4. Record Clamping & Gotchas
+* Every series sample timestamp must satisfy `startTime ≤ sample.time ≤ endTime`. A single timestamp 1ms outside the window throws `IllegalArgumentException`.
+* Clamped single-point windows enforce a ≥1s non-zero duration (`clampRecordWindow`), and buckets that fall entirely outside or at `sessionEnd` are safely dropped.
+* For sessions > 1 hour, series records (`PowerRecord`, `SpeedRecord`, `CyclingPedalingCadenceRecord`) are grouped into 30-minute chunks (`POWER_CHUNK_SECONDS = 1800`) to remain well within the 1 MB Binder transaction buffer.
+* Metadata is constructed via `Metadata.activelyRecorded(device = Device(type = Device.TYPE_PHONE), clientRecordId = ...)`.
 
-**Step 1: Calculate mechanical work (kJ)**
-```
-work_kJ = Σ (watts_i × interval_seconds_i) / 1000
-```
-Sum instantaneous power samples over the workout duration.
+#### D.5. Calorie Calculation
 
-**Step 2: Convert to calories using the kJ ≈ kcal rule**
+Health Connect does **not** calculate calories internally — the app computes and writes both active and total values using the kJ ≈ kcal rule:
 
-Human cycling efficiency is ~24%. Since 1 kcal = 4.184 kJ, the conversion factor is `1 / (4.184 × 0.24) ≈ 1.0`. This means **1 kJ of mechanical work ≈ 1 kcal of metabolic energy expenditure**. This is the same formula Garmin, Strava, and Zwift use when a power meter is present.
+1. **Total metabolic expenditure:**
+   `totalCaloriesKcal = totalWorkKj` (human cycling mechanical efficiency ≈ 24% matches metabolic cost 1:1). Written to `TotalCaloriesBurnedRecord`.
+2. **Active calories:**
+   `activeCaloriesKcal = max(0, totalWorkKj - (weightKg * durationSeconds / 3600))` (subtracting resting BMR ≈ 1 kcal/kg/hr). Written to `ActiveCaloriesBurnedRecord`.
 
-```kotlin
-val totalCalories = workKj  // 1:1 approximation (total metabolic cost)
-val activeCalories = totalCalories - (bmrPerSecond * durationSeconds)
-// where bmrPerSecond ≈ weight_kg * 1.0 / 3600  (≈1 MET resting cost)
-```
+#### D.6. Opt-In Reads & Cardio Load Invariants
 
-**What to write to Health Connect:**
-* `ActiveCaloriesBurnedRecord` should contain **active calories** (total minus resting/BMR for the duration). This matches what Fitbit, Pixel Watch, and Google Fit report as "active calories."
-* The `TotalCaloriesBurnedRecord` (if written) should contain the full metabolic cost including BMR.
-
-**Why not the QZ formula?** QZ uses `(0.048 × watts + 1.19) × weight × 3.5 / 200 / 60` which is a simplified ACSM metabolic equation. It produces roughly similar results but diverges at high power outputs and doesn't cleanly separate active vs. total calories. The kJ ≈ kcal method is more widely adopted and produces values consistent with what users see on Garmin/Strava.
+* **Opt-in Profile Import:** `HealthConnectReader` queries `WeightRecord`, `HeightRecord`, `RestingHeartRateRecord`, `SleepSessionRecord`, and `HeartRateVariabilityRmssdRecord` over a 7-day lookback window.
+* **Never silent overwrite:** Values are presented in a confirmation preview dialog with timestamps and provenance. Values older than the local profile's `lastUpdatedEpochMs` are flagged as stale.
+* **Cardio Load / TRIMP note:** Cardio Load is a proprietary Google Health / Fitbit computation requiring continuous heart rate sensed directly by a paired Pixel Watch (1–5) or Fitbit device (Charge, Versa, Sense, Inspire). Third-party imported stationary cycling sessions do not generate cardio load credit on their own in Google Health; users must wear their paired watch during the ride for load accumulation.
 
 ---
 

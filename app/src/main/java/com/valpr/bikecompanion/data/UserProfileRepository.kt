@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.valpr.bikecompanion.shared.AthleteMetrics
@@ -41,7 +42,8 @@ data class UserProfile(
     val unitSystem: UnitSystem = UnitSystem.METRIC,
     val keepScreenOn: Boolean = true,
     val beginnerPathDismissed: Boolean = false,
-    val beginnerPathCollapsed: Boolean = false
+    val beginnerPathCollapsed: Boolean = false,
+    val lastUpdatedEpochMs: Long = 0L
 ) {
     /**
      * Whether an FTP has been configured. Workouts cannot start without a valid FTP.
@@ -105,6 +107,7 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
         val KEY_KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
         val KEY_BEGINNER_PATH_DISMISSED = booleanPreferencesKey("beginner_path_dismissed")
         val KEY_BEGINNER_PATH_COLLAPSED = booleanPreferencesKey("beginner_path_collapsed")
+        val KEY_LAST_UPDATED = longPreferencesKey("profile_last_updated_epoch_ms")
 
         const val DEFAULT_WEIGHT_KG = 75.0f
         const val DEFAULT_CADENCE_FLOOR = 60
@@ -156,19 +159,42 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
                 } ?: DEFAULT_UNIT_SYSTEM,
                 keepScreenOn = preferences[KEY_KEEP_SCREEN_ON] ?: DEFAULT_KEEP_SCREEN_ON,
                 beginnerPathDismissed = preferences[KEY_BEGINNER_PATH_DISMISSED] ?: DEFAULT_BEGINNER_PATH_DISMISSED,
-                beginnerPathCollapsed = preferences[KEY_BEGINNER_PATH_COLLAPSED] ?: DEFAULT_BEGINNER_PATH_COLLAPSED
+                beginnerPathCollapsed = preferences[KEY_BEGINNER_PATH_COLLAPSED] ?: DEFAULT_BEGINNER_PATH_COLLAPSED,
+                lastUpdatedEpochMs = preferences[KEY_LAST_UPDATED] ?: 0L
             )
         }
+
+    suspend fun applyHealthImport(
+        weightKg: Float? = null,
+        heightCm: Float? = null,
+        restingHeartRate: Int? = null
+    ) {
+        dataStore.edit { preferences ->
+            val now = System.currentTimeMillis()
+            if (weightKg != null) {
+                preferences[KEY_WEIGHT_KG] = weightKg.coerceAtLeast(20.0f)
+            }
+            if (heightCm != null) {
+                preferences[KEY_HEIGHT_CM] = heightCm.coerceIn(50.0f, 250.0f)
+            }
+            if (restingHeartRate != null) {
+                preferences[KEY_RESTING_HEART_RATE] = restingHeartRate.coerceIn(30, 120)
+            }
+            preferences[KEY_LAST_UPDATED] = now
+        }
+    }
 
     suspend fun updateFtp(ftp: Int) {
         dataStore.edit { preferences ->
             preferences[KEY_FTP] = ftp.coerceAtLeast(0)
+            preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
         }
     }
 
     suspend fun updateWeight(weightKg: Float) {
         dataStore.edit { preferences ->
             preferences[KEY_WEIGHT_KG] = weightKg.coerceAtLeast(20.0f)
+            preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
         }
     }
 
@@ -176,6 +202,7 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { preferences ->
             preferences[KEY_FTP] = ftp.coerceAtLeast(0)
             preferences[KEY_WEIGHT_KG] = weightKg.coerceAtLeast(20.0f)
+            preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
         }
     }
 
@@ -190,6 +217,7 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
             preferences[KEY_CRITICAL_HEART_RATE] = criticalHr.coerceIn(100, 240)
             preferences[KEY_RESTING_HEART_RATE] = restingHr.coerceIn(30, 120)
             preferences[KEY_LTHR] = lthr.coerceIn(80, 220)
+            preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
         }
     }
 
@@ -199,6 +227,7 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
             preferences[KEY_WEIGHT_KG] = weightKg.coerceAtLeast(20.0f)
             preferences[KEY_HEIGHT_CM] = heightCm.coerceIn(50.0f, 250.0f)
             preferences[KEY_BIOLOGICAL_SEX] = sex.name
+            preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
         }
     }
 
@@ -206,6 +235,7 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { preferences ->
             preferences[KEY_FTP] = ftp.coerceAtLeast(0)
             preferences[KEY_PREFERRED_CADENCE] = preferredCadenceRpm.coerceIn(40, 140)
+            preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
         }
     }
 

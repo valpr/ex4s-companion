@@ -5,14 +5,26 @@ import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
+import androidx.health.connect.client.records.CyclingPedalingCadenceRecord
+import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ExerciseLap
+import androidx.health.connect.client.records.ExerciseSegment
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.PowerRecord
 import androidx.health.connect.client.records.Record
+import androidx.health.connect.client.records.SpeedRecord
+import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.metadata.Device
 import androidx.health.connect.client.records.metadata.Metadata
+import androidx.health.connect.client.request.ReadRecordsRequest
+import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.health.connect.client.units.Energy
+import androidx.health.connect.client.units.Length
 import androidx.health.connect.client.units.Power
+import androidx.health.connect.client.units.Velocity
+import com.valpr.bikecompanion.history.CompletedRide
+import com.valpr.bikecompanion.workout.WorkoutSegment
 import com.valpr.bikecompanion.workout.WorkoutSummary
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +60,26 @@ data class HrPoint(val timeEpochMs: Long, val bpm: Int)
 /** Plain power point (JVM-safe, no Health Connect dependency). */
 data class PowerPoint(val timeEpochMs: Long, val watts: Int)
 
+/** Plain speed point (JVM-safe, no Health Connect dependency). */
+data class SpeedPoint(val timeEpochMs: Long, val speedKmh: Double)
+
+/** Plain cadence point (JVM-safe, no Health Connect dependency). */
+data class CadencePoint(val timeEpochMs: Long, val cadenceRpm: Int)
+
+/** Plain planned segment (JVM-safe). */
+data class PlannedSegment(val startEpochMs: Long, val endEpochMs: Long, val segmentType: Int)
+
+/** Plain planned lap (JVM-safe). */
+data class PlannedLap(val startEpochMs: Long, val endEpochMs: Long, val distanceMeters: Double? = null)
+
+/** Lightweight summary of an existing session record for JVM-testable dedup checks. */
+data class SessionRecordSummary(
+    val clientRecordId: String?,
+    val startTimeEpochMs: Long,
+    val endTimeEpochMs: Long,
+    val title: String?
+)
+
 /**
  * Planned record set derived from a [WorkoutSummary] using only plain Kotlin types,
  * so the planning math is unit-testable on the JVM without Android/Health Connect.
@@ -58,7 +90,12 @@ data class PlannedWorkoutRecords(
     val hrPoints: List<HrPoint>,
     val powerChunks: List<List<PowerPoint>>,
     val totalCaloriesKcal: Double,
-    val activeCaloriesKcal: Double
+    val activeCaloriesKcal: Double,
+    val speedChunks: List<List<SpeedPoint>> = emptyList(),
+    val cadenceChunks: List<List<CadencePoint>> = emptyList(),
+    val totalDistanceMeters: Double = 0.0,
+    val segments: List<PlannedSegment> = emptyList(),
+    val laps: List<PlannedLap> = emptyList()
 )
 
 /**
@@ -67,8 +104,9 @@ data class PlannedWorkoutRecords(
  * Never called during a workout — invoked once on session completion with the
  * full in-memory sample buffer:
  * 1× [ExerciseSessionRecord] (`BIKING_STATIONARY`), 1× [HeartRateRecord],
- * N× [PowerRecord] (chunked to stay under the Binder buffer), and
- * 1× [ActiveCaloriesBurnedRecord] (1 kJ mechanical ≈ 1 kcal metabolic).
+ * N× [PowerRecord] (chunked to stay under the Binder buffer),
+ * N× [SpeedRecord], N× [CyclingPedalingCadenceRecord], 1× [DistanceRecord],
+ * 1× [TotalCaloriesBurnedRecord], and 1× [ActiveCaloriesBurnedRecord].
  */
 class HealthConnectManager(
     private val context: Context,
@@ -77,7 +115,7 @@ class HealthConnectManager(
     companion object {
         private const val TAG = "HealthConnectManager"
 
-        /** Max span per PowerRecord — keeps large sessions under the ~1MB Binder limit. */
+        /** Max span per series record — keeps large sessions under the ~1MB Binder limit. */
         const val POWER_CHUNK_SECONDS = 1800
 
         /** Permissions required for the batch write. */
@@ -86,7 +124,10 @@ class HealthConnectManager(
             HealthPermission.getWritePermission(ExerciseSessionRecord::class),
             HealthPermission.getWritePermission(HeartRateRecord::class),
             HealthPermission.getWritePermission(PowerRecord::class),
-            HealthPermission.getWritePermission(ActiveCaloriesBurnedRecord::class)
+            HealthPermission.getWritePermission(ActiveCaloriesBurnedRecord::class),
+            HealthPermission.getWritePermission(DistanceRecord::class),
+            HealthPermission.getWritePermission(SpeedRecord::class),
+            HealthPermission.getWritePermission(TotalCaloriesBurnedRecord::class)
         )
 
         /**
@@ -120,6 +161,25 @@ class HealthConnectManager(
             }
             if (e <= s) return null
             return s to e
+        }
+
+        /**
+         * Pure dedup predicate (JVM-testable): returns true if any existing session matches
+         * the candidate's clientRecordId or has identical time window + title.
+         */
+        fun isDuplicateSession(
+            existing: List<SessionRecordSummary>,
+            expectedClientId: String,
+            expectedStartMs: Long,
+            expectedEndMs: Long,
+            expectedTitle: String
+        ): Boolean = existing.any { session ->
+            (session.clientRecordId != null && session.clientRecordId == expectedClientId) ||
+                (
+                    session.startTimeEpochMs == expectedStartMs &&
+                        session.endTimeEpochMs == expectedEndMs &&
+                        session.title == expectedTitle
+                    )
         }
 
         /**
@@ -161,19 +221,88 @@ class HealthConnectManager(
                 }
                 .filter { it.isNotEmpty() }
 
+            // Chunk speed samples into ≤30-min buckets.
+            val speedChunks = summary.samples
+                .filter { it.speedKmh >= 0.0 }
+                .groupBy { it.elapsedSeconds / POWER_CHUNK_SECONDS }
+                .toSortedMap()
+                .values
+                .map { bucket ->
+                    bucket.map { sample ->
+                        SpeedPoint(
+                            timeEpochMs = (start + sample.elapsedSeconds * 1000L).coerceIn(start, end),
+                            speedKmh = sample.speedKmh.coerceAtLeast(0.0)
+                        )
+                    }
+                }
+                .filter { it.isNotEmpty() }
+
+            // Chunk cadence samples into ≤30-min buckets.
+            val cadenceChunks = summary.samples
+                .filter { it.cadenceRpm >= 0 }
+                .groupBy { it.elapsedSeconds / POWER_CHUNK_SECONDS }
+                .toSortedMap()
+                .values
+                .map { bucket ->
+                    bucket.map { sample ->
+                        CadencePoint(
+                            timeEpochMs = (start + sample.elapsedSeconds * 1000L).coerceIn(start, end),
+                            cadenceRpm = sample.cadenceRpm.coerceAtLeast(0)
+                        )
+                    }
+                }
+                .filter { it.isNotEmpty() }
+
+            val totalDistanceMeters = (summary.totalDistanceKm.coerceAtLeast(0.0) * 1000.0)
             val totalKcal = summary.totalWorkKj.coerceAtLeast(0.0)
+
+            val segments = mutableListOf<PlannedSegment>()
+            val laps = mutableListOf<PlannedLap>()
+            val workout = summary.workout
+            if (workout != null && workout.segments.isNotEmpty()) {
+                var accumulatedSec = 0
+                for (seg in workout.segments) {
+                    val segStartMs = (start + accumulatedSec * 1000L).coerceIn(start, end)
+                    val segEndMs = (start + (accumulatedSec + seg.durationSeconds) * 1000L).coerceIn(start, end)
+                    accumulatedSec += seg.durationSeconds
+                    val window = clampRecordWindow(segStartMs, segEndMs, start, end) ?: continue
+
+                    val type = if (seg is WorkoutSegment.SteadyState && seg.power < 0.6f) {
+                        ExerciseSegment.EXERCISE_SEGMENT_TYPE_REST
+                    } else {
+                        ExerciseSegment.EXERCISE_SEGMENT_TYPE_BIKING_STATIONARY
+                    }
+                    segments += PlannedSegment(window.first, window.second, type)
+                    laps += PlannedLap(window.first, window.second, distanceMeters = null)
+                }
+            } else {
+                val window = clampRecordWindow(start, end, start, end)
+                if (window != null) {
+                    segments += PlannedSegment(
+                        window.first,
+                        window.second,
+                        ExerciseSegment.EXERCISE_SEGMENT_TYPE_BIKING_STATIONARY
+                    )
+                    laps += PlannedLap(window.first, window.second, distanceMeters = totalDistanceMeters)
+                }
+            }
 
             return PlannedWorkoutRecords(
                 sessionStartEpochMs = start,
                 sessionEndEpochMs = end,
                 hrPoints = hrPoints,
                 powerChunks = powerChunks,
+                speedChunks = speedChunks,
+                cadenceChunks = cadenceChunks,
+                totalDistanceMeters = totalDistanceMeters,
                 totalCaloriesKcal = totalKcal,
                 activeCaloriesKcal = activeCaloriesKcal(
                     totalWorkKj = summary.totalWorkKj,
                     weightKg = weightKg,
                     durationSeconds = summary.totalDurationSeconds
-                )
+                ),
+                segments = segments,
+                laps = laps
             )
         }
 
@@ -181,25 +310,62 @@ class HealthConnectManager(
          * Assembles Health Connect [Record] objects from a plan. Runs on-device only
          * (kept separate from [planRecords] so planning stays JVM-testable).
          */
-        fun toHealthRecords(plan: PlannedWorkoutRecords, title: String): List<Record> {
+        fun toHealthRecords(
+            plan: PlannedWorkoutRecords,
+            title: String,
+            clientRecordId: String? = null
+        ): List<Record> {
             val zoneOffset = ZoneId.systemDefault().rules.getOffset(
                 Instant.ofEpochMilli(plan.sessionStartEpochMs)
             )
             val start = Instant.ofEpochMilli(plan.sessionStartEpochMs)
             val end = Instant.ofEpochMilli(plan.sessionEndEpochMs)
-            val metadata = Metadata.activelyRecorded(
-                device = Device(type = Device.TYPE_PHONE)
-            )
+
+            fun makeMetadata(suffix: String? = null): Metadata {
+                val id = if (clientRecordId != null) {
+                    if (suffix != null) "${clientRecordId}_$suffix" else clientRecordId
+                } else {
+                    null
+                }
+                return if (id != null) {
+                    Metadata.activelyRecorded(
+                        device = Device(type = Device.TYPE_PHONE),
+                        clientRecordId = id
+                    )
+                } else {
+                    Metadata.activelyRecorded(
+                        device = Device(type = Device.TYPE_PHONE)
+                    )
+                }
+            }
+
             val records = mutableListOf<Record>()
+
+            val exerciseSegments = plan.segments.map {
+                ExerciseSegment(
+                    startTime = Instant.ofEpochMilli(it.startEpochMs),
+                    endTime = Instant.ofEpochMilli(it.endEpochMs),
+                    segmentType = it.segmentType
+                )
+            }
+            val exerciseLaps = plan.laps.map {
+                ExerciseLap(
+                    startTime = Instant.ofEpochMilli(it.startEpochMs),
+                    endTime = Instant.ofEpochMilli(it.endEpochMs),
+                    length = it.distanceMeters?.let { d -> Length.meters(d) }
+                )
+            }
 
             records += ExerciseSessionRecord(
                 startTime = start,
                 startZoneOffset = zoneOffset,
                 endTime = end,
                 endZoneOffset = zoneOffset,
-                metadata = metadata,
+                metadata = makeMetadata(),
                 exerciseType = ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY,
-                title = title
+                title = title,
+                segments = exerciseSegments,
+                laps = exerciseLaps
             )
 
             if (plan.hrPoints.isNotEmpty()) {
@@ -224,12 +390,12 @@ class HealthConnectManager(
                                 beatsPerMinute = point.bpm.toLong()
                             )
                         },
-                        metadata = metadata
+                        metadata = makeMetadata("hr")
                     )
                 }
             }
 
-            for (chunk in plan.powerChunks) {
+            for ((index, chunk) in plan.powerChunks.withIndex()) {
                 val window = clampRecordWindow(
                     chunk.first().timeEpochMs,
                     chunk.last().timeEpochMs,
@@ -249,9 +415,77 @@ class HealthConnectManager(
                             time = Instant.ofEpochMilli(point.timeEpochMs)
                         )
                     },
-                    metadata = metadata
+                    metadata = makeMetadata("power_$index")
                 )
             }
+
+            for ((index, chunk) in plan.speedChunks.withIndex()) {
+                val window = clampRecordWindow(
+                    chunk.first().timeEpochMs,
+                    chunk.last().timeEpochMs,
+                    plan.sessionStartEpochMs,
+                    plan.sessionEndEpochMs
+                ) ?: continue
+                val chunkStart = Instant.ofEpochMilli(window.first)
+                val chunkEnd = Instant.ofEpochMilli(window.second)
+                records += SpeedRecord(
+                    startTime = chunkStart,
+                    startZoneOffset = zoneOffset,
+                    endTime = chunkEnd,
+                    endZoneOffset = zoneOffset,
+                    samples = chunk.map { point ->
+                        SpeedRecord.Sample(
+                            time = Instant.ofEpochMilli(point.timeEpochMs),
+                            speed = Velocity.kilometersPerHour(point.speedKmh)
+                        )
+                    },
+                    metadata = makeMetadata("speed_$index")
+                )
+            }
+
+            for ((index, chunk) in plan.cadenceChunks.withIndex()) {
+                val window = clampRecordWindow(
+                    chunk.first().timeEpochMs,
+                    chunk.last().timeEpochMs,
+                    plan.sessionStartEpochMs,
+                    plan.sessionEndEpochMs
+                ) ?: continue
+                val chunkStart = Instant.ofEpochMilli(window.first)
+                val chunkEnd = Instant.ofEpochMilli(window.second)
+                records += CyclingPedalingCadenceRecord(
+                    startTime = chunkStart,
+                    startZoneOffset = zoneOffset,
+                    endTime = chunkEnd,
+                    endZoneOffset = zoneOffset,
+                    samples = chunk.map { point ->
+                        CyclingPedalingCadenceRecord.Sample(
+                            time = Instant.ofEpochMilli(point.timeEpochMs),
+                            revolutionsPerMinute = point.cadenceRpm.toDouble()
+                        )
+                    },
+                    metadata = makeMetadata("cadence_$index")
+                )
+            }
+
+            if (plan.totalDistanceMeters >= 0.0) {
+                records += DistanceRecord(
+                    startTime = start,
+                    startZoneOffset = zoneOffset,
+                    endTime = end,
+                    endZoneOffset = zoneOffset,
+                    distance = Length.meters(plan.totalDistanceMeters),
+                    metadata = makeMetadata("distance")
+                )
+            }
+
+            records += TotalCaloriesBurnedRecord(
+                startTime = start,
+                startZoneOffset = zoneOffset,
+                endTime = end,
+                endZoneOffset = zoneOffset,
+                energy = Energy.kilocalories(plan.totalCaloriesKcal),
+                metadata = makeMetadata("total_cals")
+            )
 
             records += ActiveCaloriesBurnedRecord(
                 startTime = start,
@@ -259,7 +493,7 @@ class HealthConnectManager(
                 endTime = end,
                 endZoneOffset = zoneOffset,
                 energy = Energy.kilocalories(plan.activeCaloriesKcal),
-                metadata = metadata
+                metadata = makeMetadata("active_cals")
             )
 
             return records
@@ -332,7 +566,44 @@ class HealthConnectManager(
             }
             try {
                 val plan = planRecords(summary, weightKg.toDouble())
-                val records = toHealthRecords(plan, summary.workoutName)
+                val clientRecordId = CompletedRide.rideIdFor(plan.sessionStartEpochMs)
+
+                // Pre-read dedup check: verify session hasn't already been written
+                val start = Instant.ofEpochMilli(plan.sessionStartEpochMs)
+                val end = Instant.ofEpochMilli(plan.sessionEndEpochMs)
+                val existing = try {
+                    client.readRecords(
+                        ReadRecordsRequest(
+                            recordType = ExerciseSessionRecord::class,
+                            timeRangeFilter = TimeRangeFilter.between(start, end)
+                        )
+                    ).records.map {
+                        SessionRecordSummary(
+                            clientRecordId = it.metadata.clientRecordId,
+                            startTimeEpochMs = it.startTime.toEpochMilli(),
+                            endTimeEpochMs = it.endTime.toEpochMilli(),
+                            title = it.title
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Pre-read dedup check failed: ${e.message}")
+                    emptyList()
+                }
+
+                if (isDuplicateSession(
+                        existing = existing,
+                        expectedClientId = clientRecordId,
+                        expectedStartMs = plan.sessionStartEpochMs,
+                        expectedEndMs = plan.sessionEndEpochMs,
+                        expectedTitle = summary.workoutName
+                    )
+                ) {
+                    Log.i(TAG, "Session $clientRecordId already synced to Health Connect; skipping duplicate insert")
+                    _syncState.value = HealthSyncState.Success
+                    return@launch
+                }
+
+                val records = toHealthRecords(plan, summary.workoutName, clientRecordId)
                 client.insertRecords(records)
                 Log.i(TAG, "Synced ${summary.workoutName}: ${records.size} records")
                 _syncState.value = HealthSyncState.Success

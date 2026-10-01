@@ -1,5 +1,6 @@
 package com.valpr.bikecompanion.ui.athletestats
 
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,9 +31,12 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -57,6 +61,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,8 +71,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.health.connect.client.PermissionController
 import com.valpr.bikecompanion.data.BleConnectionState
+import com.valpr.bikecompanion.health.HealthConnectReader
 import com.valpr.bikecompanion.health.HealthConnectionStatus
+import com.valpr.bikecompanion.health.HealthImportPreview
 import com.valpr.bikecompanion.health.HealthSyncState
 import com.valpr.bikecompanion.shared.AthleteMetrics
 import com.valpr.bikecompanion.shared.BiologicalSex
@@ -81,6 +89,10 @@ import com.valpr.bikecompanion.ui.theme.AccentRed
 import com.valpr.bikecompanion.ui.theme.TextMuted
 import com.valpr.bikecompanion.ui.theme.TextPrimary
 import com.valpr.bikecompanion.ui.theme.TextSecondary
+import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -97,6 +109,8 @@ fun AthleteStatsScreen(
     val bleConnectionState by viewModel.bleManager.connectionState.collectAsState()
     val lastBleError by viewModel.bleManager.lastError.collectAsState()
     val discoveredDevices by viewModel.bleManager.discoveredDevices.collectAsState()
+    val isImportLoading by viewModel.isImportLoading.collectAsState()
+    val importPreview by viewModel.importPreview.collectAsState()
 
     var showScanDialog by remember { mutableStateOf(false) }
     var isHardwareExpanded by remember { mutableStateOf(false) }
@@ -767,7 +781,7 @@ fun AthleteStatsScreen(
                             Spacer(modifier = Modifier.height(16.dp))
 
                             // Health Connect Sub-card
-                            Text("Health Connect Sync", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("Health Connect Integration", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             Spacer(modifier = Modifier.height(8.dp))
 
                             val availabilityText = when (healthStatus.providerAvailable) {
@@ -778,11 +792,25 @@ fun AthleteStatsScreen(
                             Text(availabilityText, style = MaterialTheme.typography.bodyMedium)
 
                             val permissionText = when (healthStatus.permissionsGranted) {
-                                true -> "Permissions granted — workouts sync on completion"
-                                false -> "Permissions missing — workouts will not sync"
+                                true -> "Workout sync: Auto-synced on workout completion"
+                                false -> "Workout sync: Missing write permissions"
                                 null -> "Permission status unknown"
                             }
                             Text(permissionText, style = MaterialTheme.typography.bodySmall, color = TextMuted)
+
+                            if (profile.lastUpdatedEpochMs > 0L) {
+                                val updatedStr = remember(profile.lastUpdatedEpochMs) {
+                                    val dt = Instant.ofEpochMilli(profile.lastUpdatedEpochMs)
+                                    DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm")
+                                        .withZone(ZoneId.systemDefault())
+                                        .format(dt)
+                                }
+                                Text(
+                                    "Profile vitals last saved: $updatedStr",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextMuted
+                                )
+                            }
 
                             if (healthSyncState is HealthSyncState.Failed) {
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -801,7 +829,50 @@ fun AthleteStatsScreen(
                                     enabled = healthStatus.providerAvailable != false,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text("Grant Health Connect Permissions")
+                                    Text("Grant Health Connect Write Permissions")
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            val coroutineScope = rememberCoroutineScope()
+                            val readPermissionLauncher = rememberLauncherForActivityResult(
+                                PermissionController.createRequestPermissionResultContract()
+                            ) { granted ->
+                                if (granted.containsAll(HealthConnectReader.readPermissions())) {
+                                    viewModel.loadHealthImportPreview()
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        if (viewModel.healthConnectReader.hasReadPermissions()) {
+                                            viewModel.loadHealthImportPreview()
+                                        } else {
+                                            readPermissionLauncher.launch(HealthConnectReader.readPermissions())
+                                        }
+                                    }
+                                },
+                                enabled = healthStatus.providerAvailable != false && !isImportLoading,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                if (isImportLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Checking Health Connect…")
+                                } else {
+                                    Icon(
+                                        Icons.Default.Refresh,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Import Vitals from Health Connect")
                                 }
                             }
 
@@ -930,6 +1001,175 @@ fun AthleteStatsScreen(
             }
 
             Spacer(modifier = Modifier.height(20.dp))
+        }
+    }
+
+    val currentPreview = importPreview
+    if (currentPreview != null) {
+        HealthImportDialog(
+            preview = currentPreview,
+            isMetric = isMetric,
+            onConfirm = { includeStale ->
+                viewModel.confirmHealthImport(currentPreview, includeStale)
+            },
+            onDismiss = {
+                viewModel.dismissImportPreview()
+            }
+        )
+    }
+}
+
+@Composable
+private fun HealthImportDialog(
+    preview: HealthImportPreview,
+    isMetric: Boolean,
+    onConfirm: (includeStale: Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var includeStale by remember { mutableStateOf(false) }
+    val formatter = remember {
+        DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm").withZone(ZoneId.systemDefault())
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Import from Health Connect", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (preview.weightKg != null) {
+                    val w = preview.weightKg
+                    val displayWeight = if (isMetric) {
+                        "%.1f kg".format(w.value)
+                    } else {
+                        "%.1f lbs".format(AthleteMetrics.kgToLbs(w.value))
+                    }
+                    MetricImportRow(
+                        label = "Weight",
+                        value = displayWeight,
+                        timestamp = formatter.format(Instant.ofEpochMilli(w.timestampEpochMs)),
+                        isStale = w.isStaleComparedToProfile
+                    )
+                }
+
+                if (preview.heightCm != null) {
+                    val h = preview.heightCm
+                    val displayHeight = if (isMetric) {
+                        "%.0f cm".format(h.value)
+                    } else {
+                        val totalInches = AthleteMetrics.cmToInches(h.value).roundToInt()
+                        val ft = totalInches / 12
+                        val inches = totalInches % 12
+                        "$ft' $inches\""
+                    }
+                    MetricImportRow(
+                        label = "Height",
+                        value = displayHeight,
+                        timestamp = formatter.format(Instant.ofEpochMilli(h.timestampEpochMs)),
+                        isStale = h.isStaleComparedToProfile
+                    )
+                }
+
+                if (preview.restingHeartRate != null) {
+                    val r = preview.restingHeartRate
+                    MetricImportRow(
+                        label = "Resting HR",
+                        value = "${r.value} bpm",
+                        timestamp = formatter.format(Instant.ofEpochMilli(r.timestampEpochMs)),
+                        isStale = r.isStaleComparedToProfile
+                    )
+                }
+
+                if (preview.recoveryNudge != null || preview.latestSleepDurationMinutes != null || preview.latestHrvRmssd != null) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("Recovery & Sleep Indicators", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            if (preview.latestSleepDurationMinutes != null) {
+                                val min = preview.latestSleepDurationMinutes.value
+                                Text("Latest Sleep: ${min / 60}h ${min % 60}m", fontSize = 11.sp, color = TextSecondary)
+                            }
+                            if (preview.latestHrvRmssd != null) {
+                                Text("Latest HRV: %.1f ms".format(preview.latestHrvRmssd.value), fontSize = 11.sp, color = TextSecondary)
+                            }
+                            if (preview.recoveryNudge != null) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(preview.recoveryNudge, fontSize = 11.sp, color = AccentCyan)
+                            }
+                        }
+                    }
+                }
+
+                val hasAnyStale = listOfNotNull(preview.weightKg, preview.heightCm, preview.restingHeartRate)
+                    .any { it.isStaleComparedToProfile }
+
+                if (hasAnyStale) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { includeStale = !includeStale }
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Checkbox(
+                            checked = includeStale,
+                            onCheckedChange = { includeStale = it }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            "Overwrite with older records (profile is newer)",
+                            fontSize = 11.sp,
+                            color = AccentAmber
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(includeStale) },
+                enabled = preview.hasMetricsToImport && (!preview.allImportableStale || includeStale)
+            ) {
+                Text("Apply to Profile")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun MetricImportRow(
+    label: String,
+    value: String,
+    timestamp: String,
+    isStale: Boolean
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            Text(value, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("Recorded $timestamp", fontSize = 10.sp, color = TextMuted)
+            if (isStale) {
+                Text("Older than profile", fontSize = 10.sp, color = AccentAmber)
+            }
         }
     }
 }

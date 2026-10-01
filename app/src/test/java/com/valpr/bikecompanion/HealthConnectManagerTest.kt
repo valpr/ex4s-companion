@@ -169,4 +169,161 @@ class HealthConnectManagerTest {
         assertTrue(window!!.first >= start && window.second <= end)
         assertTrue(window.second > window.first)
     }
+
+    @Test
+    fun testPlanRecords_includesSpeedAndCadenceChunks() {
+        val startMs = 1_716_000_000_000L
+        val samples = (1..100).map {
+            sample(elapsed = it, watts = 200, hr = 140).copy(
+                speedKmh = 32.5,
+                cadenceRpm = 90
+            )
+        }
+        val s = summary(durationSeconds = 100, startMs = startMs, samples = samples)
+        val plan = HealthConnectManager.planRecords(s, 75.0)
+
+        assertEquals(1, plan.speedChunks.size)
+        assertEquals(100, plan.speedChunks[0].size)
+        assertEquals(32.5, plan.speedChunks[0][0].speedKmh, 0.001)
+
+        assertEquals(1, plan.cadenceChunks.size)
+        assertEquals(100, plan.cadenceChunks[0].size)
+        assertEquals(90, plan.cadenceChunks[0][0].cadenceRpm)
+    }
+
+    @Test
+    fun testPlanRecords_totalDistanceAndTotalCalories() {
+        val s = summary(durationSeconds = 600).copy(
+            totalDistanceKm = 8.5,
+            totalWorkKj = 150.0
+        )
+        val plan = HealthConnectManager.planRecords(s, 75.0)
+
+        assertEquals(8500.0, plan.totalDistanceMeters, 0.001)
+        assertEquals(150.0, plan.totalCaloriesKcal, 0.001)
+    }
+
+    @Test
+    fun testPlanRecords_freeRideProducesSingleSegmentAndLap() {
+        val startMs = 1_716_000_000_000L
+        val s = summary(durationSeconds = 600, startMs = startMs).copy(
+            totalDistanceKm = 5.0,
+            workout = null
+        )
+        val plan = HealthConnectManager.planRecords(s, 75.0)
+
+        assertEquals(1, plan.segments.size)
+        assertEquals(startMs, plan.segments[0].startEpochMs)
+        assertEquals(startMs + 600_000L, plan.segments[0].endEpochMs)
+        assertEquals(
+            androidx.health.connect.client.records.ExerciseSegment.EXERCISE_SEGMENT_TYPE_BIKING_STATIONARY,
+            plan.segments[0].segmentType
+        )
+
+        assertEquals(1, plan.laps.size)
+        assertEquals(startMs, plan.laps[0].startEpochMs)
+        assertEquals(startMs + 600_000L, plan.laps[0].endEpochMs)
+        assertEquals(5000.0, plan.laps[0].distanceMeters!!, 0.001)
+    }
+
+    @Test
+    fun testPlanRecords_structuredWorkoutMapsIntervalSegmentsAndLaps() {
+        val startMs = 1_716_000_000_000L
+        val structured = com.valpr.bikecompanion.workout.Workout(
+            name = "Test Intervals",
+            segments = listOf(
+                com.valpr.bikecompanion.workout.WorkoutSegment.Warmup(120, 0.4f, 0.6f),
+                com.valpr.bikecompanion.workout.WorkoutSegment.SteadyState(180, 0.9f),
+                com.valpr.bikecompanion.workout.WorkoutSegment.SteadyState(120, 0.5f), // Recovery
+                com.valpr.bikecompanion.workout.WorkoutSegment.Cooldown(60, 0.5f, 0.3f)
+            )
+        )
+        val s = summary(durationSeconds = 480, startMs = startMs).copy(workout = structured)
+        val plan = HealthConnectManager.planRecords(s, 75.0)
+
+        assertEquals(4, plan.segments.size)
+        assertEquals(4, plan.laps.size)
+
+        // Warmup: biking stationary
+        assertEquals(startMs, plan.segments[0].startEpochMs)
+        assertEquals(startMs + 120_000L, plan.segments[0].endEpochMs)
+        assertEquals(
+            androidx.health.connect.client.records.ExerciseSegment.EXERCISE_SEGMENT_TYPE_BIKING_STATIONARY,
+            plan.segments[0].segmentType
+        )
+
+        // Work: biking stationary
+        assertEquals(startMs + 120_000L, plan.segments[1].startEpochMs)
+        assertEquals(startMs + 300_000L, plan.segments[1].endEpochMs)
+        assertEquals(
+            androidx.health.connect.client.records.ExerciseSegment.EXERCISE_SEGMENT_TYPE_BIKING_STATIONARY,
+            plan.segments[1].segmentType
+        )
+
+        // Recovery: rest
+        assertEquals(startMs + 300_000L, plan.segments[2].startEpochMs)
+        assertEquals(startMs + 420_000L, plan.segments[2].endEpochMs)
+        assertEquals(
+            androidx.health.connect.client.records.ExerciseSegment.EXERCISE_SEGMENT_TYPE_REST,
+            plan.segments[2].segmentType
+        )
+
+        // Cooldown: biking stationary
+        assertEquals(startMs + 420_000L, plan.segments[3].startEpochMs)
+        assertEquals(startMs + 480_000L, plan.segments[3].endEpochMs)
+    }
+
+    @Test
+    fun testIsDuplicateSession_detectsMatchingClientIdOrWindow() {
+        val existing = listOf(
+            com.valpr.bikecompanion.health.SessionRecordSummary(
+                clientRecordId = "ride_1716000000000",
+                startTimeEpochMs = 1_716_000_000_000L,
+                endTimeEpochMs = 1_716_000_600_000L,
+                title = "Morning Ride"
+            )
+        )
+
+        // Matches clientRecordId
+        assertTrue(
+            HealthConnectManager.isDuplicateSession(
+                existing = existing,
+                expectedClientId = "ride_1716000000000",
+                expectedStartMs = 1_716_000_000_000L,
+                expectedEndMs = 1_716_000_600_000L,
+                expectedTitle = "Different Title"
+            )
+        )
+
+        // Matches time window + title when clientRecordId differs/is null
+        assertTrue(
+            HealthConnectManager.isDuplicateSession(
+                existing = listOf(existing[0].copy(clientRecordId = null)),
+                expectedClientId = "ride_other",
+                expectedStartMs = 1_716_000_000_000L,
+                expectedEndMs = 1_716_000_600_000L,
+                expectedTitle = "Morning Ride"
+            )
+        )
+
+        // Completely different session
+        org.junit.Assert.assertFalse(
+            HealthConnectManager.isDuplicateSession(
+                existing = existing,
+                expectedClientId = "ride_999",
+                expectedStartMs = 1_717_000_000_000L,
+                expectedEndMs = 1_717_000_600_000L,
+                expectedTitle = "Evening Ride"
+            )
+        )
+    }
+
+    @Test
+    fun testRequiredPermissions_includesAllEnrichedTypes() {
+        val perms = HealthConnectManager.requiredPermissions()
+        assertEquals(8, perms.size)
+        assertTrue(perms.any { it.contains("DISTANCE") })
+        assertTrue(perms.any { it.contains("SPEED") })
+        assertTrue(perms.any { it.contains("TOTAL_CALORIES") })
+    }
 }

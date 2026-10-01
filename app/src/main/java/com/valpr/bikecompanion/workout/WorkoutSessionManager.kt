@@ -56,7 +56,8 @@ data class WorkoutSummary(
     val totalCaloriesKcal: Int,
     val samples: List<WorkoutMetricSample>,
     /** Wall-clock epoch millis when the session started (anchors Health Connect record windows). */
-    val startTimeEpochMs: Long = 0L
+    val startTimeEpochMs: Long = 0L,
+    val workout: Workout? = null
 )
 
 data class WorkoutSessionState(
@@ -484,7 +485,8 @@ class WorkoutSessionManager(
             totalWorkKj = totalWorkKj,
             totalCaloriesKcal = totalCaloriesKcal,
             samples = samples,
-            startTimeEpochMs = sessionStartEpochMs
+            startTimeEpochMs = sessionStartEpochMs,
+            workout = state.workout
         )
     }
 }

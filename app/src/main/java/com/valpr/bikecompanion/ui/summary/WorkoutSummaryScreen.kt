@@ -2,6 +2,7 @@ package com.valpr.bikecompanion.ui.summary
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -203,6 +204,7 @@ fun WorkoutSummaryScreen(
 
             // Health Connect sync status + retry
             HealthSyncCard(
+                summary = summary,
                 state = healthSyncState,
                 onRetry = onSyncRetry,
                 onConnect = onSyncConnect
@@ -233,6 +235,7 @@ fun WorkoutSummaryScreen(
 
 @Composable
 private fun HealthSyncCard(
+    summary: WorkoutSummary,
     state: HealthSyncState,
     onRetry: () -> Unit,
     onConnect: () -> Unit,
@@ -249,7 +252,7 @@ private fun HealthSyncCard(
             icon = Icons.Default.CheckCircle
             iconTint = Color(0xFF00E676)
             title = "Synced to Health Connect"
-            subtitle = "Exercise, heart rate, power & calories saved"
+            subtitle = "Session, HR, power, cadence, speed & calories saved"
         }
         is HealthSyncState.Syncing -> {
             containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -292,33 +295,75 @@ private fun HealthSyncCard(
         colors = CardDefaults.cardColors(containerColor = containerColor),
         modifier = modifier.fillMaxWidth()
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(14.dp)
         ) {
-            if (state is HealthSyncState.Syncing) {
-                CircularProgressIndicator(
-                    modifier = Modifier.padding(end = 12.dp),
-                    color = MaterialTheme.colorScheme.primary
-                )
-            } else {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.padding(end = 12.dp)
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (state is HealthSyncState.Syncing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.padding(end = 12.dp),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        tint = iconTint,
+                        modifier = Modifier.padding(end = 12.dp)
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(subtitle, fontSize = 12.sp, color = Color.Gray)
+                }
+                when (state) {
+                    is HealthSyncState.Failed -> Button(onClick = onRetry) { Text("Retry") }
+                    is HealthSyncState.PermissionRequired -> Button(onClick = onConnect) { Text("Grant") }
+                    else -> Unit
+                }
             }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Text(subtitle, fontSize = 12.sp, color = Color.Gray)
-            }
-            when (state) {
-                is HealthSyncState.Failed -> Button(onClick = onRetry) { Text("Retry") }
-                is HealthSyncState.PermissionRequired -> Button(onClick = onConnect) { Text("Grant") }
-                else -> Unit
+
+            if (state is HealthSyncState.Success) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val distStr = "%.1f km".format(summary.totalDistanceKm)
+                    val calStr = "${summary.totalCaloriesKcal} kcal"
+                    listOf(
+                        "Stationary Bike",
+                        "HR",
+                        "Power",
+                        "Cadence",
+                        "Speed",
+                        distStr,
+                        calStr
+                    ).forEach { chipText ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFF004D2C))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(chipText, fontSize = 10.sp, color = Color(0xFFA7F3D0))
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Cardio Load requires HR recorded directly by a paired Pixel Watch or Fitbit. Health Connect import alone may show 0 cardio load.",
+                    fontSize = 11.sp,
+                    color = Color(0xFF81C784),
+                    lineHeight = 14.sp
+                )
             }
         }
     }

@@ -131,4 +131,16 @@ class UserProfileRepositoryTest {
         r.updateBeginnerPathCollapsed(true)
         assertTrue(r.userProfileFlow.first().beginnerPathCollapsed)
     }
+
+    @Test
+    fun applyHealthImport_updatesVitalsAndStampsTimestamp() = runTest {
+        val r = repo()
+        val before = System.currentTimeMillis()
+        r.applyHealthImport(weightKg = 71.5f, heightCm = 178.0f, restingHeartRate = 54)
+        val p = r.userProfileFlow.first()
+        assertEquals(71.5f, p.weightKg, 0.001f)
+        assertEquals(178.0f, p.heightCm, 0.001f)
+        assertEquals(54, p.restingHeartRate)
+        assertTrue(p.lastUpdatedEpochMs >= before)
+    }
 }
