@@ -41,6 +41,8 @@ class UserProfileRepositoryTest {
         assertEquals(85, profile.preferredCadenceRpm)
         assertEquals(UnitSystem.METRIC, profile.unitSystem)
         assertTrue(profile.keepScreenOn)
+        assertFalse(profile.beginnerPathDismissed)
+        assertFalse(profile.beginnerPathCollapsed)
     }
 
     @Test
@@ -110,5 +112,23 @@ class UserProfileRepositoryTest {
         assertFalse(r.userProfileFlow.first().keepScreenOn)
         r.updateKeepScreenOn(true)
         assertTrue(r.userProfileFlow.first().keepScreenOn)
+    }
+
+    @Test
+    fun updateBeginnerPathDismissed_persistsAndRestores() = runTest {
+        val r = repo()
+        assertFalse(r.userProfileFlow.first().beginnerPathDismissed)
+        r.updateBeginnerPathDismissed(true)
+        assertTrue(r.userProfileFlow.first().beginnerPathDismissed)
+        r.updateBeginnerPathDismissed(false)
+        assertFalse(r.userProfileFlow.first().beginnerPathDismissed)
+    }
+
+    @Test
+    fun updateBeginnerPathCollapsed_persists() = runTest {
+        val r = repo()
+        assertFalse(r.userProfileFlow.first().beginnerPathCollapsed)
+        r.updateBeginnerPathCollapsed(true)
+        assertTrue(r.userProfileFlow.first().beginnerPathCollapsed)
     }
 }

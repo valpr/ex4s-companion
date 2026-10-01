@@ -39,7 +39,9 @@ data class UserProfile(
     val lactateThresholdHeartRate: Int = 165,
     val preferredCadenceRpm: Int = 85,
     val unitSystem: UnitSystem = UnitSystem.METRIC,
-    val keepScreenOn: Boolean = true
+    val keepScreenOn: Boolean = true,
+    val beginnerPathDismissed: Boolean = false,
+    val beginnerPathCollapsed: Boolean = false
 ) {
     /**
      * Whether an FTP has been configured. Workouts cannot start without a valid FTP.
@@ -101,6 +103,8 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
         val KEY_PREFERRED_CADENCE = intPreferencesKey("athlete_preferred_cadence")
         val KEY_UNIT_SYSTEM = stringPreferencesKey("athlete_unit_system")
         val KEY_KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
+        val KEY_BEGINNER_PATH_DISMISSED = booleanPreferencesKey("beginner_path_dismissed")
+        val KEY_BEGINNER_PATH_COLLAPSED = booleanPreferencesKey("beginner_path_collapsed")
 
         const val DEFAULT_WEIGHT_KG = 75.0f
         const val DEFAULT_CADENCE_FLOOR = 60
@@ -117,6 +121,8 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
         const val DEFAULT_PREFERRED_CADENCE = 85
         val DEFAULT_UNIT_SYSTEM = UnitSystem.METRIC
         const val DEFAULT_KEEP_SCREEN_ON = true
+        const val DEFAULT_BEGINNER_PATH_DISMISSED = false
+        const val DEFAULT_BEGINNER_PATH_COLLAPSED = false
     }
 
     val userProfileFlow: Flow<UserProfile> = dataStore.data
@@ -148,7 +154,9 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
                 unitSystem = preferences[KEY_UNIT_SYSTEM]?.let {
                     runCatching { UnitSystem.valueOf(it) }.getOrDefault(DEFAULT_UNIT_SYSTEM)
                 } ?: DEFAULT_UNIT_SYSTEM,
-                keepScreenOn = preferences[KEY_KEEP_SCREEN_ON] ?: DEFAULT_KEEP_SCREEN_ON
+                keepScreenOn = preferences[KEY_KEEP_SCREEN_ON] ?: DEFAULT_KEEP_SCREEN_ON,
+                beginnerPathDismissed = preferences[KEY_BEGINNER_PATH_DISMISSED] ?: DEFAULT_BEGINNER_PATH_DISMISSED,
+                beginnerPathCollapsed = preferences[KEY_BEGINNER_PATH_COLLAPSED] ?: DEFAULT_BEGINNER_PATH_COLLAPSED
             )
         }
 
@@ -224,6 +232,18 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun updateKeepScreenOn(keepScreenOn: Boolean) {
         dataStore.edit { preferences ->
             preferences[KEY_KEEP_SCREEN_ON] = keepScreenOn
+        }
+    }
+
+    suspend fun updateBeginnerPathDismissed(dismissed: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_BEGINNER_PATH_DISMISSED] = dismissed
+        }
+    }
+
+    suspend fun updateBeginnerPathCollapsed(collapsed: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_BEGINNER_PATH_COLLAPSED] = collapsed
         }
     }
 }
