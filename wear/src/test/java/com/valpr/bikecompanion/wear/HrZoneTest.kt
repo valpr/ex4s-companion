@@ -36,6 +36,28 @@ class HrZoneTest {
     }
 
     @Test
+    fun testKarvonenHrZoneCalculations() {
+        val maxHr = 190
+        val restingHr = 50
+        // hrr = 140
+        // Z1: < 134
+        assertEquals(HrZone.ZONE_1, HrZone.fromBpm(45, maxHr, restingHr, useKarvonen = true))
+        assertEquals(HrZone.ZONE_1, HrZone.fromBpm(133, maxHr, restingHr, useKarvonen = true))
+        // Z2: 134..147
+        assertEquals(HrZone.ZONE_2, HrZone.fromBpm(134, maxHr, restingHr, useKarvonen = true))
+        assertEquals(HrZone.ZONE_2, HrZone.fromBpm(147, maxHr, restingHr, useKarvonen = true))
+        // Z3: 148..161
+        assertEquals(HrZone.ZONE_3, HrZone.fromBpm(148, maxHr, restingHr, useKarvonen = true))
+        assertEquals(HrZone.ZONE_3, HrZone.fromBpm(161, maxHr, restingHr, useKarvonen = true))
+        // Z4: 162..175
+        assertEquals(HrZone.ZONE_4, HrZone.fromBpm(162, maxHr, restingHr, useKarvonen = true))
+        assertEquals(HrZone.ZONE_4, HrZone.fromBpm(175, maxHr, restingHr, useKarvonen = true))
+        // Z5: >= 176
+        assertEquals(HrZone.ZONE_5, HrZone.fromBpm(176, maxHr, restingHr, useKarvonen = true))
+        assertEquals(HrZone.ZONE_5, HrZone.fromBpm(195, maxHr, restingHr, useKarvonen = true))
+    }
+
+    @Test
     fun testHrZoneLabelsAndNumbers() {
         assertEquals(1, HrZone.ZONE_1.zoneNumber)
         assertEquals(2, HrZone.ZONE_2.zoneNumber)

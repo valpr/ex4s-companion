@@ -410,10 +410,12 @@ private fun TheBigThree(state: WorkoutSessionState, watchState: WearableWatchSta
 
         // 3. Heart Rate or Speed / Resistance
         if (state.currentHeartRate > 0) {
-            // Shared zone thresholds (same as watch) based on athlete max HR.
+            // Shared zone thresholds (same as watch) based on athlete HR parameters and Karvonen preference.
             val zone = com.valpr.bikecompanion.shared.HrZone.zoneNumber(
-                state.currentHeartRate,
-                state.athleteMaxHr
+                bpm = state.currentHeartRate,
+                maxHr = state.athleteMaxHr,
+                restingHr = state.athleteRestingHr,
+                useKarvonen = state.useKarvonenZones
             )
             // A frozen HR number must never present as live: dim the tile and
             // qualify it whenever the link is not actively delivering batches

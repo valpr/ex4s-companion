@@ -62,5 +62,9 @@ class WearSyncDecisionTest {
         assertTrue(WearSyncDecision.shouldSync(now, now, base.copy(targetWatts = 180), base, false))
         // maxHr
         assertTrue(WearSyncDecision.shouldSync(now, now, base.copy(athleteMaxHr = 185), base, false))
+        // restingHr
+        assertTrue(WearSyncDecision.shouldSync(now, now, base.copy(athleteRestingHr = 55), base, false))
+        // useKarvonenZones
+        assertTrue(WearSyncDecision.shouldSync(now, now, base.copy(useKarvonenZones = true), base, false))
     }
 }

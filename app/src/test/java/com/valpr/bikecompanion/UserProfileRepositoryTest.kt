@@ -43,27 +43,29 @@ class UserProfileRepositoryTest {
         assertTrue(profile.keepScreenOn)
         assertFalse(profile.beginnerPathDismissed)
         assertFalse(profile.beginnerPathCollapsed)
+        assertFalse(profile.useKarvonenZones)
     }
 
     @Test
-    fun updateFtp_persistsAndCoerces() = runTest {
+    fun setUseKarvonenZones_persists() = runTest {
         val r = repo()
-        r.updateFtp(220)
-        assertTrue(r.userProfileFlow.first().isFtpConfigured)
-        assertEquals(220, r.userProfileFlow.first().ftp)
-        r.updateFtp(-5)
-        assertEquals(0, r.userProfileFlow.first().ftp)
+        assertFalse(r.userProfileFlow.first().useKarvonenZones)
+        r.setUseKarvonenZones(true)
+        assertTrue(r.userProfileFlow.first().useKarvonenZones)
+        r.setUseKarvonenZones(false)
+        assertFalse(r.userProfileFlow.first().useKarvonenZones)
     }
 
     @Test
     fun updateHeartRateSettings_coercesToRange() = runTest {
         val r = repo()
-        r.updateHeartRateSettings(maxHr = 400, criticalHr = 10, restingHr = 20, lthr = 300)
+        r.updateHeartRateSettings(maxHr = 400, criticalHr = 10, restingHr = 20, lthr = 300, useKarvonen = true)
         val p = r.userProfileFlow.first()
         assertEquals(240, p.maxHeartRate)
         assertEquals(100, p.criticalHeartRate)
         assertEquals(30, p.restingHeartRate)
         assertEquals(220, p.lactateThresholdHeartRate)
+        assertTrue(p.useKarvonenZones)
     }
 
     @Test

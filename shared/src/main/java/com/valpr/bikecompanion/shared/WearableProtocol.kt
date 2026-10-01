@@ -98,7 +98,9 @@ data class WorkoutStateMessage(
     val isCadenceFloorActive: Boolean,
     val isHrCapped: Boolean,
     val workoutName: String,
-    val athleteMaxHr: Int = 190
+    val athleteMaxHr: Int = 190,
+    val athleteRestingHr: Int = 60,
+    val useKarvonenZones: Boolean = false
 ) {
     val isRunning: Boolean get() = sessionStatus == 1
     val isPaused: Boolean get() = sessionStatus == 2
@@ -126,8 +128,10 @@ data class WorkoutStateMessage(
             if (isBailoutActive) flags = flags or 0x01
             if (isCadenceFloorActive) flags = flags or 0x02
             if (isHrCapped) flags = flags or 0x04
+            if (useKarvonenZones) flags = flags or 0x08
             dos.writeByte(flags)
             dos.writeShort(athleteMaxHr)
+            dos.writeByte(athleteRestingHr.coerceIn(30, 120))
             dos.writeUTF(workoutName)
         }
         return baos.toByteArray()
@@ -157,30 +161,38 @@ data class WorkoutStateMessage(
                     val isBailout = (flags and 0x01) != 0
                     val isCadenceFloor = (flags and 0x02) != 0
                     val isHrCapped = (flags and 0x04) != 0
-                    // Appended maxHr field with legacy fallback: old phone packets have
-                    // flags byte followed directly by UTF. Mark before probing so a
-                    // misaligned read can reset and parse the legacy layout.
-                    dis.mark(512)
+                    val isKarvonen = (flags and 0x08) != 0
+
+                    // Deterministic packet version detection based on trailing writeUTF length prefix.
+                    // Java DataOutputStream.writeUTF() precedes string bytes with a 16-bit unsigned length.
+                    fun readU16(offset: Int): Int {
+                        if (offset + 1 >= bytes.size) return -1
+                        return ((bytes[offset].toInt() and 0xFF) shl 8) or (bytes[offset + 1].toInt() and 0xFF)
+                    }
+
                     var maxHr = 190
-                    var workoutName = ""
-                    try {
-                        val candidate = dis.readShort().toInt()
-                        val name = dis.readUTF()
-                        if (candidate in 100..240) {
-                            maxHr = candidate
-                            workoutName = name
-                        } else {
-                            // Legacy packet: the "short" was the UTF length prefix. Reset.
-                            dis.reset()
-                            workoutName = dis.readUTF()
-                        }
-                    } catch (_: Exception) {
-                        try {
-                            dis.reset()
-                            workoutName = dis.readUTF()
-                        } catch (_: Exception) {
-                            return null
-                        }
+                    var restingHr = 60
+                    val workoutName: String
+
+                    // Header before athleteMaxHr is exactly 15 bytes.
+                    val v3UtfLen = readU16(18) // Offset 18: short(maxHr) + byte(restingHr) = 3 bytes
+                    val v2UtfLen = readU16(17) // Offset 17: short(maxHr) = 2 bytes
+                    val v1UtfLen = readU16(15) // Offset 15: direct UTF
+
+                    if (bytes.size >= 20 && v3UtfLen == bytes.size - 20) {
+                        // Current v3: flags (15) + short(maxHr) (17) + byte(restingHr) (18) + UTF
+                        maxHr = dis.readShort().toInt()
+                        restingHr = dis.readByte().toInt()
+                        workoutName = dis.readUTF()
+                    } else if (bytes.size >= 19 && v2UtfLen == bytes.size - 19) {
+                        // Intermediate v2: flags (15) + short(maxHr) (17) + UTF
+                        maxHr = dis.readShort().toInt()
+                        workoutName = dis.readUTF()
+                    } else if (bytes.size >= 17 && v1UtfLen == bytes.size - 17) {
+                        // Legacy v1: flags (15) + UTF directly
+                        workoutName = dis.readUTF()
+                    } else {
+                        return null
                     }
 
                     WorkoutStateMessage(
@@ -194,7 +206,9 @@ data class WorkoutStateMessage(
                         isCadenceFloorActive = isCadenceFloor,
                         isHrCapped = isHrCapped,
                         workoutName = workoutName,
-                        athleteMaxHr = maxHr
+                        athleteMaxHr = maxHr,
+                        athleteRestingHr = restingHr,
+                        useKarvonenZones = isKarvonen
                     )
                 }
             } catch (e: Exception) {

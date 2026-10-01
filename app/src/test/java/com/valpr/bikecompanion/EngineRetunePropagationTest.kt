@@ -88,6 +88,8 @@ class EngineRetunePropagationTest {
         managerTime(1100L)
         assertEquals(0.05, ergController.kp, 1e-9)
         assertEquals(190, manager.sessionState.value.athleteMaxHr)
+        assertEquals(60, manager.sessionState.value.athleteRestingHr)
+        assertEquals(false, manager.sessionState.value.useKarvonenZones)
 
         // Settings write-through lands mid-ride (same tick loop, no restart).
         profileFlow.value = baseProfile.copy(
@@ -95,7 +97,9 @@ class EngineRetunePropagationTest {
             ergKi = 0.05f,
             cadenceFloorRpm = 55,
             cadenceRecoveryRpm = 70,
-            maxHeartRate = 185
+            maxHeartRate = 185,
+            restingHeartRate = 50,
+            useKarvonenZones = true
         )
         managerScope.testScheduler.runCurrent()
 
@@ -104,6 +108,8 @@ class EngineRetunePropagationTest {
         assertEquals(55.0, ergController.cadenceFloorRpm, 1e-9)
         assertEquals(70.0, ergController.recoveryThresholdRpm, 1e-9)
         assertEquals(185, manager.sessionState.value.athleteMaxHr)
+        assertEquals(50, manager.sessionState.value.athleteRestingHr)
+        assertEquals(true, manager.sessionState.value.useKarvonenZones)
 
         // Session keeps ticking with the new gains.
         managerTime(1100L)

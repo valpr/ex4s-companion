@@ -143,6 +143,13 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    fun setUseKarvonenZones(enabled: Boolean) {
+        viewModelScope.launch {
+            userProfileRepo.setUseKarvonenZones(enabled)
+            _saveEvents.tryEmit(if (enabled) "Karvonen HRR zones enabled" else "Standard % Max HR zones enabled")
+        }
+    }
+
     fun updateUnitSystem(unitSystem: UnitSystem) {
         viewModelScope.launch {
             userProfileRepo.updateUnitSystem(unitSystem)

@@ -13,6 +13,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.valpr.bikecompanion.shared.AthleteMetrics
 import com.valpr.bikecompanion.shared.BiologicalSex
+import com.valpr.bikecompanion.shared.HrZone
 import com.valpr.bikecompanion.shared.UnitSystem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -43,6 +44,7 @@ data class UserProfile(
     val keepScreenOn: Boolean = true,
     val beginnerPathDismissed: Boolean = false,
     val beginnerPathCollapsed: Boolean = false,
+    val useKarvonenZones: Boolean = false,
     val lastUpdatedEpochMs: Long = 0L
 ) {
     /**
@@ -64,24 +66,15 @@ data class UserProfile(
         get() = AthleteMetrics.estimateBmrKcal(weightKg, heightCm, age, biologicalSex)
 
     /**
-     * Calculates the HR Zone (1 to 5) based on the athlete's max heart rate.
-     * Zone 1: < 60% (Active Recovery)
-     * Zone 2: 60-70% (Endurance)
-     * Zone 3: 70-80% (Tempo)
-     * Zone 4: 80-90% (Threshold)
-     * Zone 5: >= 90% (Anaerobic / VO2 Max)
+     * Calculates the HR Zone (1 to 5) based on athlete HR parameters and Karvonen preference.
+     * Delegates to shared HrZone single source of truth.
      */
-    fun calculateHrZone(bpm: Int): Int {
-        if (bpm <= 0 || maxHeartRate <= 0) return 0
-        val pct = bpm.toFloat() / maxHeartRate
-        return when {
-            pct < 0.60f -> 1
-            pct < 0.70f -> 2
-            pct < 0.80f -> 3
-            pct < 0.90f -> 4
-            else -> 5
-        }
-    }
+    fun calculateHrZone(bpm: Int): Int = HrZone.zoneNumber(
+        bpm = bpm,
+        maxHr = maxHeartRate,
+        restingHr = restingHeartRate,
+        useKarvonen = useKarvonenZones
+    )
 }
 
 /**
@@ -107,6 +100,7 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
         val KEY_KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
         val KEY_BEGINNER_PATH_DISMISSED = booleanPreferencesKey("beginner_path_dismissed")
         val KEY_BEGINNER_PATH_COLLAPSED = booleanPreferencesKey("beginner_path_collapsed")
+        val KEY_USE_KARVONEN_ZONES = booleanPreferencesKey("use_karvonen_zones")
         val KEY_LAST_UPDATED = longPreferencesKey("profile_last_updated_epoch_ms")
 
         const val DEFAULT_WEIGHT_KG = 75.0f
@@ -126,6 +120,7 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
         const val DEFAULT_KEEP_SCREEN_ON = true
         const val DEFAULT_BEGINNER_PATH_DISMISSED = false
         const val DEFAULT_BEGINNER_PATH_COLLAPSED = false
+        const val DEFAULT_USE_KARVONEN_ZONES = false
     }
 
     val userProfileFlow: Flow<UserProfile> = dataStore.data
@@ -160,6 +155,7 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
                 keepScreenOn = preferences[KEY_KEEP_SCREEN_ON] ?: DEFAULT_KEEP_SCREEN_ON,
                 beginnerPathDismissed = preferences[KEY_BEGINNER_PATH_DISMISSED] ?: DEFAULT_BEGINNER_PATH_DISMISSED,
                 beginnerPathCollapsed = preferences[KEY_BEGINNER_PATH_COLLAPSED] ?: DEFAULT_BEGINNER_PATH_COLLAPSED,
+                useKarvonenZones = preferences[KEY_USE_KARVONEN_ZONES] ?: DEFAULT_USE_KARVONEN_ZONES,
                 lastUpdatedEpochMs = preferences[KEY_LAST_UPDATED] ?: 0L
             )
         }
@@ -210,13 +206,24 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
         maxHr: Int,
         criticalHr: Int,
         restingHr: Int = DEFAULT_RESTING_HR,
-        lthr: Int = DEFAULT_LTHR
+        lthr: Int = DEFAULT_LTHR,
+        useKarvonen: Boolean? = null
     ) {
         dataStore.edit { preferences ->
             preferences[KEY_MAX_HEART_RATE] = maxHr.coerceIn(100, 240)
             preferences[KEY_CRITICAL_HEART_RATE] = criticalHr.coerceIn(100, 240)
             preferences[KEY_RESTING_HEART_RATE] = restingHr.coerceIn(30, 120)
             preferences[KEY_LTHR] = lthr.coerceIn(80, 220)
+            if (useKarvonen != null) {
+                preferences[KEY_USE_KARVONEN_ZONES] = useKarvonen
+            }
+            preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
+        }
+    }
+
+    suspend fun setUseKarvonenZones(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_USE_KARVONEN_ZONES] = enabled
             preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
         }
     }

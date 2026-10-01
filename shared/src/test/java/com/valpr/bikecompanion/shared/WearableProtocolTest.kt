@@ -169,7 +169,82 @@ class WearableProtocolTest {
         val decoded = WorkoutStateMessage.fromByteArray(baos.toByteArray())
         assertNotNull(decoded)
         assertEquals(190, decoded!!.athleteMaxHr)
+        assertEquals(60, decoded.athleteRestingHr)
+        assertEquals(false, decoded.useKarvonenZones)
         assertEquals("Legacy", decoded.workoutName)
+    }
+
+    @Test
+    fun testWorkoutStateLegacyPacketWithLongWorkoutName() {
+        // Legacy phone packet where workoutName length is in 100..240 (probed range in older heuristics)
+        val longName = "A".repeat(120)
+        val baos = java.io.ByteArrayOutputStream()
+        java.io.DataOutputStream(baos).use { dos ->
+            dos.writeByte(0x57)
+            dos.writeByte(WorkoutStateMessage.STATUS_RUNNING)
+            dos.writeInt(60)
+            dos.writeShort(200)
+            dos.writeShort(195)
+            dos.writeShort(85)
+            dos.writeShort(150)
+            dos.writeByte(0)
+            dos.writeUTF(longName)
+        }
+        val decoded = WorkoutStateMessage.fromByteArray(baos.toByteArray())
+        assertNotNull(decoded)
+        assertEquals(190, decoded!!.athleteMaxHr)
+        assertEquals(60, decoded.athleteRestingHr)
+        assertEquals(false, decoded.useKarvonenZones)
+        assertEquals(longName, decoded.workoutName)
+    }
+
+    @Test
+    fun testWorkoutStateIntermediatePacketDefaultsRestingHr() {
+        // Intermediate v2 packet: flags byte then maxHr Short then UTF directly (no restingHr byte).
+        val baos = java.io.ByteArrayOutputStream()
+        java.io.DataOutputStream(baos).use { dos ->
+            dos.writeByte(0x57)
+            dos.writeByte(WorkoutStateMessage.STATUS_RUNNING)
+            dos.writeInt(60)
+            dos.writeShort(200)
+            dos.writeShort(195)
+            dos.writeShort(85)
+            dos.writeShort(150)
+            dos.writeByte(0)
+            dos.writeShort(185)
+            dos.writeUTF("Intermediate")
+        }
+        val decoded = WorkoutStateMessage.fromByteArray(baos.toByteArray())
+        assertNotNull(decoded)
+        assertEquals(185, decoded!!.athleteMaxHr)
+        assertEquals(60, decoded.athleteRestingHr)
+        assertEquals(false, decoded.useKarvonenZones)
+        assertEquals("Intermediate", decoded.workoutName)
+    }
+
+    @Test
+    fun testWorkoutStateKarvonenAndRestingHrRoundTrip() {
+        val original = WorkoutStateMessage(
+            sessionStatus = WorkoutStateMessage.STATUS_RUNNING,
+            elapsedSeconds = 90,
+            targetWatts = 220,
+            currentWatts = 218,
+            cadenceRpm = 90,
+            heartRateBpm = 160,
+            isBailoutActive = false,
+            isCadenceFloorActive = false,
+            isHrCapped = false,
+            workoutName = "VO2 Intervals",
+            athleteMaxHr = 188,
+            athleteRestingHr = 52,
+            useKarvonenZones = true
+        )
+        val decoded = WorkoutStateMessage.fromByteArray(original.toByteArray())
+        assertNotNull(decoded)
+        assertEquals(188, decoded!!.athleteMaxHr)
+        assertEquals(52, decoded.athleteRestingHr)
+        assertEquals(true, decoded.useKarvonenZones)
+        assertEquals("VO2 Intervals", decoded.workoutName)
     }
 
     @Test

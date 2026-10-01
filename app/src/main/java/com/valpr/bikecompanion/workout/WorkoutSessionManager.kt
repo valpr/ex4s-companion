@@ -77,6 +77,8 @@ data class WorkoutSessionState(
     val currentHeartRate: Int = 0,
     val isCriticalHrActive: Boolean = false,
     val athleteMaxHr: Int = 190,
+    val athleteRestingHr: Int = 60,
+    val useKarvonenZones: Boolean = false,
     val athletePreferredCadence: Int = 85,
     val summary: WorkoutSummary? = null
 ) {
@@ -136,6 +138,8 @@ class WorkoutSessionManager(
     private var athleteFtp: Int = 200
     private var athleteFtpConfigured: Boolean = false
     private var athleteMaxHr: Int = 190
+    private var athleteRestingHr: Int = 60
+    private var useKarvonenZones: Boolean = false
     private var athleteCriticalHr: Int = 175
     private var athletePreferredCadence: Int = 85
     private var sessionStartEpochMs: Long = 0L
@@ -160,6 +164,8 @@ class WorkoutSessionManager(
                 athleteFtp = if (profile.isFtpConfigured) profile.ftp else 200
                 athleteFtpConfigured = profile.isFtpConfigured
                 athleteMaxHr = profile.maxHeartRate
+                athleteRestingHr = profile.restingHeartRate
+                useKarvonenZones = profile.useKarvonenZones
                 athleteCriticalHr = profile.criticalHeartRate
                 athletePreferredCadence = profile.preferredCadenceRpm
                 ergController.kp = profile.ergKp.toDouble()
@@ -169,6 +175,8 @@ class WorkoutSessionManager(
                 _sessionState.update {
                     it.copy(
                         athleteMaxHr = profile.maxHeartRate,
+                        athleteRestingHr = profile.restingHeartRate,
+                        useKarvonenZones = profile.useKarvonenZones,
                         athletePreferredCadence = profile.preferredCadenceRpm
                     )
                 }
@@ -254,6 +262,8 @@ class WorkoutSessionManager(
                 currentHeartRate = it.currentHeartRate,
                 isCriticalHrActive = reEvaluatedCritical,
                 athleteMaxHr = it.athleteMaxHr,
+                athleteRestingHr = it.athleteRestingHr,
+                useKarvonenZones = it.useKarvonenZones,
                 athletePreferredCadence = it.athletePreferredCadence,
                 summary = null
             )
@@ -366,6 +376,8 @@ class WorkoutSessionManager(
                 latestTelemetry = it.latestTelemetry,
                 currentHeartRate = it.currentHeartRate,
                 athleteMaxHr = it.athleteMaxHr,
+                athleteRestingHr = it.athleteRestingHr,
+                useKarvonenZones = it.useKarvonenZones,
                 athletePreferredCadence = it.athletePreferredCadence
             )
         }

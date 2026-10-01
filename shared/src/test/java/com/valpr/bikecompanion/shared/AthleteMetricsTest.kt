@@ -79,7 +79,12 @@ class AthleteMetricsTest {
         val karvonen = AthleteMetrics.calculateKarvonenZones(maxHr = 190, restingHr = 50)
         assertEquals(5, karvonen.size)
         assertTrue(karvonen[0].minBpm >= 50)
+        assertEquals("< 60% HRR", karvonen[0].percentRangeDescription)
         assertEquals(190, karvonen[4].maxBpm)
+
+        val small = AthleteMetrics.calculateKarvonenZones(maxHr = 25, restingHr = 15)
+        assertEquals(5, small.size)
+        assertEquals("< 60% HRR", small[0].percentRangeDescription)
     }
 
     @Test

@@ -14,7 +14,9 @@ data class WearSyncKeys(
     val isCadenceFloor: Boolean,
     val isHrCapped: Boolean,
     val targetWatts: Int,
-    val athleteMaxHr: Int
+    val athleteMaxHr: Int,
+    val athleteRestingHr: Int = 60,
+    val useKarvonenZones: Boolean = false
 )
 
 object WearSyncDecision {
@@ -38,7 +40,9 @@ object WearSyncDecision {
             current.isCadenceFloor != last.isCadenceFloor ||
             current.isHrCapped != last.isHrCapped ||
             current.targetWatts != last.targetWatts ||
-            current.athleteMaxHr != last.athleteMaxHr
+            current.athleteMaxHr != last.athleteMaxHr ||
+            current.athleteRestingHr != last.athleteRestingHr ||
+            current.useKarvonenZones != last.useKarvonenZones
         if (isTransition) return true
         return nowMs - lastSentMs >= THROTTLE_WINDOW_MS
     }

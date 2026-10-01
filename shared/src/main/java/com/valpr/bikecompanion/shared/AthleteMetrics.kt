@@ -173,14 +173,14 @@ object AthleteMetrics {
      * Karvonen / Heart Rate Reserve (HRR) zones: Target = RHR + ((MaxHR - RHR) * %intensity).
      */
     fun calculateKarvonenZones(maxHr: Int, restingHr: Int): List<CalculatedHrZone> {
-        val max = maxHr.coerceAtLeast(restingHr + 10)
+        val max = maxHr.coerceAtLeast(restingHr + 10).coerceAtLeast(40)
         val rest = restingHr.coerceIn(30, max - 1)
         val hrr = max - rest
 
         fun bpm(pct: Float) = (rest + hrr * pct).roundToInt()
 
         return listOf(
-            CalculatedHrZone(1, "Active Recovery", rest, bpm(0.60f) - 1, "50–60% HRR"),
+            CalculatedHrZone(1, "Active Recovery", rest, bpm(0.60f) - 1, "< 60% HRR"),
             CalculatedHrZone(2, "Endurance", bpm(0.60f), bpm(0.70f) - 1, "60–70% HRR"),
             CalculatedHrZone(3, "Tempo", bpm(0.70f), bpm(0.80f) - 1, "70–80% HRR"),
             CalculatedHrZone(4, "Threshold", bpm(0.80f), bpm(0.90f) - 1, "80–90% HRR"),

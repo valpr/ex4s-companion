@@ -202,6 +202,9 @@ class WorkoutSessionManagerTest {
 
         manager.resetToIdle()
         assertNull(manager.sessionState.value.sourceWorkoutFilename)
+        assertEquals(190, manager.sessionState.value.athleteMaxHr)
+        assertEquals(60, manager.sessionState.value.athleteRestingHr)
+        assertEquals(false, manager.sessionState.value.useKarvonenZones)
     }
 
     @Test
@@ -395,6 +398,8 @@ class WorkoutSessionManagerTest {
         assertEquals(85, state.latestTelemetry.cadenceRpm)
         assertEquals(140, state.currentHeartRate)
         assertEquals(190, state.athleteMaxHr)
+        assertEquals(60, state.athleteRestingHr)
+        assertEquals(false, state.useKarvonenZones)
     }
 
     @Test

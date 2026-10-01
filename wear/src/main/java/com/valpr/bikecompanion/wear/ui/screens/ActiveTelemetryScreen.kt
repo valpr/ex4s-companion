@@ -41,7 +41,12 @@ fun ActiveTelemetryScreen(
     onPauseTriggered: () -> Unit = {},
     onResumeTriggered: () -> Unit = {}
 ) {
-    val hrZone = HrZone.fromBpm(currentHeartRate, workoutState.athleteMaxHr)
+    val hrZone = HrZone.fromBpm(
+        bpm = currentHeartRate,
+        maxHr = workoutState.athleteMaxHr,
+        restingHr = workoutState.athleteRestingHr,
+        useKarvonen = workoutState.useKarvonenZones
+    )
     val displayHr = if (currentHeartRate > 0) "$currentHeartRate" else "—"
 
     // In ambient mode, use monochrome white/gray to preserve battery; in active, use Zone color

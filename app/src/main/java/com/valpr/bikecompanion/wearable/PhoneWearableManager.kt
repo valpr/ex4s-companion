@@ -314,7 +314,9 @@ class PhoneWearableManager(
                 isHrCapped = isHrCapped,
                 workoutName = session.workout?.name
                     ?: if (session.isFreeRide && session.status != SessionStatus.IDLE) "Free Ride" else "",
-                athleteMaxHr = session.athleteMaxHr
+                athleteMaxHr = session.athleteMaxHr,
+                athleteRestingHr = session.athleteRestingHr,
+                useKarvonenZones = session.useKarvonenZones
             )
 
             try {
@@ -365,7 +367,9 @@ class PhoneWearableManager(
                     isCadenceFloor = isCadenceFloor,
                     isHrCapped = isHrCapped,
                     targetWatts = targetWatts,
-                    athleteMaxHr = session.athleteMaxHr
+                    athleteMaxHr = session.athleteMaxHr,
+                    athleteRestingHr = session.athleteRestingHr,
+                    useKarvonenZones = session.useKarvonenZones
                 )
                 if (targetNodeId.isBlank() && session.status != SessionStatus.IDLE) {
                     if (now - lastNodeRefreshMs >= NODE_REFRESH_INTERVAL_MS) {
@@ -391,7 +395,9 @@ class PhoneWearableManager(
                     workoutName =
                     session.workout?.name
                         ?: if (session.isFreeRide && session.status != SessionStatus.IDLE) "Free Ride" else "",
-                    athleteMaxHr = session.athleteMaxHr
+                    athleteMaxHr = session.athleteMaxHr,
+                    athleteRestingHr = session.athleteRestingHr,
+                    useKarvonenZones = session.useKarvonenZones
                 )
 
                 try {

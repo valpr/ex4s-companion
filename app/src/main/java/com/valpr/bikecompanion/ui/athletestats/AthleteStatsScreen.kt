@@ -147,7 +147,6 @@ fun AthleteStatsScreen(
     var restingHrInput by remember(profile.restingHeartRate) { mutableStateOf(profile.restingHeartRate.toString()) }
     var lthrInput by remember(profile.lactateThresholdHeartRate) { mutableStateOf(profile.lactateThresholdHeartRate.toString()) }
     var criticalHrInput by remember(profile.criticalHeartRate) { mutableStateOf(profile.criticalHeartRate.toString()) }
-    var useKarvonenZones by remember { mutableStateOf(false) }
 
     // Engine tuning sliders
     var sliderKp by remember(profile.ergKp) { mutableFloatStateOf(profile.ergKp) }
@@ -301,20 +300,22 @@ fun AthleteStatsScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // BMR indicator & Save button
+                    // BMR indicator
+                    val bmrKcal = profile.estimatedBmrKcal
+                    Text(
+                        "Est. BMR: ~$bmrKcal kcal/day",
+                        fontSize = 12.sp,
+                        color = AccentCyan,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Save Vitals button
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.End
                     ) {
-                        val bmrKcal = profile.estimatedBmrKcal
-                        Text(
-                            "Est. BMR: ~$bmrKcal kcal/day",
-                            fontSize = 12.sp,
-                            color = AccentCyan,
-                            fontWeight = FontWeight.Medium
-                        )
-
                         Button(
                             onClick = {
                                 val enteredAge = ageInput.toIntOrNull() ?: profile.age
@@ -327,7 +328,7 @@ fun AthleteStatsScreen(
                                 viewModel.updateAthleteBio(enteredAge, weightKg, heightCm, selectedSex)
                             }
                         ) {
-                            Text("Save Vitals")
+                            Text("Save Vitals", maxLines = 1, softWrap = false)
                         }
                     }
                 }
@@ -596,21 +597,23 @@ fun AthleteStatsScreen(
                         Text("HR Training Zones", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Karvonen (HRR)", fontSize = 11.sp, color = if (useKarvonenZones) AccentCyan else TextMuted)
+                            Text("Karvonen (HRR)", fontSize = 11.sp, color = if (profile.useKarvonenZones) AccentCyan else TextMuted)
                             Spacer(modifier = Modifier.width(4.dp))
                             Switch(
-                                checked = useKarvonenZones,
-                                onCheckedChange = { useKarvonenZones = it }
+                                checked = profile.useKarvonenZones,
+                                onCheckedChange = { viewModel.setUseKarvonenZones(it) }
                             )
                         }
                     }
 
                     Spacer(modifier = Modifier.height(6.dp))
 
-                    val hrZones = if (useKarvonenZones) {
-                        AthleteMetrics.calculateKarvonenZones(profile.maxHeartRate, profile.restingHeartRate)
+                    val previewMax = maxHrInput.toIntOrNull() ?: profile.maxHeartRate
+                    val previewRest = restingHrInput.toIntOrNull() ?: profile.restingHeartRate
+                    val hrZones = if (profile.useKarvonenZones) {
+                        AthleteMetrics.calculateKarvonenZones(previewMax, previewRest)
                     } else {
-                        AthleteMetrics.calculateMaxHrZones(profile.maxHeartRate)
+                        AthleteMetrics.calculateMaxHrZones(previewMax)
                     }
 
                     val zoneColors = listOf(
