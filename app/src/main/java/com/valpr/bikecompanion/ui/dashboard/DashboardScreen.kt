@@ -298,7 +298,7 @@ fun DashboardScreen(
                 title = { Text("EX-4S Companion", fontWeight = FontWeight.Bold) },
                 actions = {
                     IconButton(onClick = onNavigateToAthleteStats) {
-                        Icon(Icons.Default.Person, contentDescription = "Athlete Profile & Stats")
+                        Icon(Icons.Default.Person, contentDescription = "Stats")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

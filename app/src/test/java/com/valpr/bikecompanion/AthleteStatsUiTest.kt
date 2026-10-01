@@ -35,7 +35,7 @@ class AthleteStatsUiTest {
         }
 
         // Check Top Bar & Core cards
-        composeRule.onNodeWithText("Athlete Profile & Stats").assertIsDisplayed()
+        composeRule.onNodeWithText("Stats").assertIsDisplayed()
         composeRule.onNodeWithText("Athlete Biometrics").assertIsDisplayed()
         composeRule.onNodeWithText("Power Performance & FTP").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("POWER-TO-WEIGHT").performScrollTo().assertIsDisplayed()

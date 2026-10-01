@@ -175,7 +175,7 @@ fun AthleteStatsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Athlete Profile & Stats", fontWeight = FontWeight.Bold) },
+                title = { Text("Stats", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
