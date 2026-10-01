@@ -7,8 +7,11 @@ import com.valpr.bikecompanion.BikeApplication
 import com.valpr.bikecompanion.data.UserProfile
 import com.valpr.bikecompanion.shared.BiologicalSex
 import com.valpr.bikecompanion.shared.UnitSystem
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -24,6 +27,14 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = UserProfile()
         )
+
+    /**
+     * One-shot save confirmations emitted only after the DataStore write
+     * completes. The screen collects these into a Snackbar so every explicit
+     * save surfaces visible feedback.
+     */
+    private val _saveEvents = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val saveEvents: SharedFlow<String> = _saveEvents.asSharedFlow()
 
     fun updateFtp(ftp: Int) {
         viewModelScope.launch {
@@ -45,6 +56,7 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
                 heightCm = heightCm,
                 sex = sex
             )
+            _saveEvents.tryEmit("Vitals saved")
         }
     }
 
@@ -54,6 +66,7 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
                 ftp = ftp,
                 preferredCadenceRpm = preferredCadenceRpm
             )
+            _saveEvents.tryEmit("Power settings saved")
         }
     }
 
@@ -65,6 +78,7 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
                 restingHr = restingHr,
                 lthr = lthr
             )
+            _saveEvents.tryEmit("Heart rate settings saved")
         }
     }
 
@@ -82,6 +96,7 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
                 kp = kp,
                 ki = ki
             )
+            _saveEvents.tryEmit("Engine tuning saved")
         }
     }
 
@@ -93,6 +108,7 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
                 kp = 0.05f,
                 ki = 0.01f
             )
+            _saveEvents.tryEmit("Engine tuning reset to defaults")
         }
     }
 

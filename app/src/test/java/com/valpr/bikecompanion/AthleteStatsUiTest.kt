@@ -2,6 +2,7 @@ package com.valpr.bikecompanion
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -56,5 +57,45 @@ class AthleteStatsUiTest {
         composeRule.onNodeWithText("Advanced Engine Tuning").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Reset to Defaults").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Firmware Lockdown Advisory").assertDoesNotExist()
+    }
+
+    @Test
+    fun saveVitals_showsSnackbarConfirmation() {
+        val app = ApplicationProvider.getApplicationContext<BikeApplication>()
+        val viewModel = AthleteStatsViewModel(app)
+
+        composeRule.setContent {
+            AthleteStatsScreen(
+                viewModel = viewModel,
+                onNavigateBack = {}
+            )
+        }
+
+        composeRule.onNodeWithText("Save Vitals").performScrollTo().performClick()
+        // DataStore write + snackbar are asynchronous; poll until visible.
+        composeRule.waitUntil(timeoutMillis = 5000) {
+            composeRule.onAllNodesWithText("Vitals saved").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Vitals saved").assertIsDisplayed()
+    }
+
+    @Test
+    fun savePower_showsSnackbarConfirmation() {
+        val app = ApplicationProvider.getApplicationContext<BikeApplication>()
+        val viewModel = AthleteStatsViewModel(app)
+
+        composeRule.setContent {
+            AthleteStatsScreen(
+                viewModel = viewModel,
+                onNavigateBack = {}
+            )
+        }
+
+        composeRule.onNodeWithText("Save Power").performScrollTo().performClick()
+        // DataStore write + snackbar are asynchronous; poll until visible.
+        composeRule.waitUntil(timeoutMillis = 5000) {
+            composeRule.onAllNodesWithText("Power settings saved").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Power settings saved").assertIsDisplayed()
     }
 }
