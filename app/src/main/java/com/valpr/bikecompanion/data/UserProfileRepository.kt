@@ -3,6 +3,7 @@ package com.valpr.bikecompanion.data
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
@@ -37,7 +38,8 @@ data class UserProfile(
     val restingHeartRate: Int = 60,
     val lactateThresholdHeartRate: Int = 165,
     val preferredCadenceRpm: Int = 85,
-    val unitSystem: UnitSystem = UnitSystem.METRIC
+    val unitSystem: UnitSystem = UnitSystem.METRIC,
+    val keepScreenOn: Boolean = true
 ) {
     /**
      * Whether an FTP has been configured. Workouts cannot start without a valid FTP.
@@ -98,6 +100,7 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
         val KEY_LTHR = intPreferencesKey("athlete_lthr")
         val KEY_PREFERRED_CADENCE = intPreferencesKey("athlete_preferred_cadence")
         val KEY_UNIT_SYSTEM = stringPreferencesKey("athlete_unit_system")
+        val KEY_KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
 
         const val DEFAULT_WEIGHT_KG = 75.0f
         const val DEFAULT_CADENCE_FLOOR = 60
@@ -113,6 +116,7 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
         const val DEFAULT_LTHR = 165
         const val DEFAULT_PREFERRED_CADENCE = 85
         val DEFAULT_UNIT_SYSTEM = UnitSystem.METRIC
+        const val DEFAULT_KEEP_SCREEN_ON = true
     }
 
     val userProfileFlow: Flow<UserProfile> = dataStore.data
@@ -143,7 +147,8 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
                 preferredCadenceRpm = preferences[KEY_PREFERRED_CADENCE] ?: DEFAULT_PREFERRED_CADENCE,
                 unitSystem = preferences[KEY_UNIT_SYSTEM]?.let {
                     runCatching { UnitSystem.valueOf(it) }.getOrDefault(DEFAULT_UNIT_SYSTEM)
-                } ?: DEFAULT_UNIT_SYSTEM
+                } ?: DEFAULT_UNIT_SYSTEM,
+                keepScreenOn = preferences[KEY_KEEP_SCREEN_ON] ?: DEFAULT_KEEP_SCREEN_ON
             )
         }
 
@@ -213,6 +218,12 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
             preferences[KEY_CADENCE_RECOVERY] = cadenceRecoveryRpm.coerceIn(60, 100)
             preferences[KEY_ERG_KP] = kp.coerceIn(0.001f, 0.5f)
             preferences[KEY_ERG_KI] = ki.coerceIn(0.0001f, 0.1f)
+        }
+    }
+
+    suspend fun updateKeepScreenOn(keepScreenOn: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_KEEP_SCREEN_ON] = keepScreenOn
         }
     }
 }

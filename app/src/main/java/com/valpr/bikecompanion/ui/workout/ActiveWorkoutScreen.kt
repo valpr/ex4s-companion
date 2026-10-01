@@ -44,6 +44,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -51,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -69,11 +71,20 @@ import kotlin.math.roundToInt
 fun ActiveWorkoutScreen(
     sessionManager: WorkoutSessionManager,
     onFinish: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    keepScreenOn: Boolean = true
 ) {
     val sessionState by sessionManager.sessionState.collectAsState()
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    val currentView = LocalView.current
+    DisposableEffect(keepScreenOn) {
+        currentView.keepScreenOn = keepScreenOn
+        onDispose {
+            currentView.keepScreenOn = false
+        }
+    }
 
     Surface(
         modifier = modifier.fillMaxSize(),

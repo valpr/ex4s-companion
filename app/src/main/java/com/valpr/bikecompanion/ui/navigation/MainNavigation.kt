@@ -69,11 +69,15 @@ fun MainNavigation(onRequestPermissions: () -> Unit, modifier: Modifier = Modifi
                 // Return to dashboard but leave workout running in foreground service
                 currentScreen = AppScreen.DASHBOARD
             }
+            val userProfile by app.userProfileRepository.userProfileFlow.collectAsState(
+                initial = UserProfile()
+            )
             ActiveWorkoutScreen(
                 sessionManager = sessionManager,
                 onFinish = {
                     currentScreen = AppScreen.WORKOUT_SUMMARY
                 },
+                keepScreenOn = userProfile.keepScreenOn,
                 modifier = modifier
             )
         }

@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -862,6 +863,57 @@ fun AthleteStatsScreen(
 
                             Spacer(modifier = Modifier.height(12.dp))
                         }
+                    }
+                }
+            }
+
+            // ----------------------------------------------------
+            // 5. Display & Screen Settings
+            // ----------------------------------------------------
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Smartphone, contentDescription = null, tint = AccentCyan)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Display & Screen Settings",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 16.dp)
+                        ) {
+                            Text(
+                                "Keep Screen Awake During Workouts",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                "Prevents device screen from sleeping while in active workout mode so you can monitor cadence and metrics hands-free.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextMuted
+                            )
+                        }
+
+                        Switch(
+                            checked = profile.keepScreenOn,
+                            onCheckedChange = { viewModel.updateKeepScreenOn(it) }
+                        )
                     }
                 }
             }

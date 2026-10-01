@@ -40,6 +40,7 @@ class UserProfileRepositoryTest {
         assertEquals(165, profile.lactateThresholdHeartRate)
         assertEquals(85, profile.preferredCadenceRpm)
         assertEquals(UnitSystem.METRIC, profile.unitSystem)
+        assertTrue(profile.keepScreenOn)
     }
 
     @Test
@@ -99,5 +100,15 @@ class UserProfileRepositoryTest {
         assertEquals(40, p.cadenceFloorRpm)
         assertEquals(100, p.cadenceRecoveryRpm)
         assertEquals(0.5f, p.ergKp, 0.0001f)
+    }
+
+    @Test
+    fun updateKeepScreenOn_persists() = runTest {
+        val r = repo()
+        assertTrue(r.userProfileFlow.first().keepScreenOn)
+        r.updateKeepScreenOn(false)
+        assertFalse(r.userProfileFlow.first().keepScreenOn)
+        r.updateKeepScreenOn(true)
+        assertTrue(r.userProfileFlow.first().keepScreenOn)
     }
 }

@@ -99,4 +99,10 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
     fun setAutoConnect(enabled: Boolean) {
         bleManager.autoConnect = enabled
     }
+
+    fun updateKeepScreenOn(enabled: Boolean) {
+        viewModelScope.launch {
+            userProfileRepo.updateKeepScreenOn(enabled)
+        }
+    }
 }

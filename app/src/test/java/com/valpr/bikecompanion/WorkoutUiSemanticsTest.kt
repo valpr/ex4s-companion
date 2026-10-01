@@ -1,5 +1,10 @@
 package com.valpr.bikecompanion
 
+import android.view.View
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -244,5 +249,45 @@ class WorkoutUiSemanticsTest {
 
         composeRule.onNodeWithText("Return to Dashboard").performClick()
         org.junit.Assert.assertTrue(done)
+    }
+
+    @Test
+    fun activeWorkoutScreen_keepsScreenOnWhenEnabled_andRestoresOnDisposal() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null) // Free ride
+
+        var showScreen by mutableStateOf(true)
+        var keepOn by mutableStateOf(true)
+        lateinit var hostView: View
+
+        composeRule.setContent {
+            hostView = LocalView.current
+            if (showScreen) {
+                ActiveWorkoutScreen(
+                    sessionManager = manager,
+                    onFinish = {},
+                    keepScreenOn = keepOn
+                )
+            }
+        }
+
+        // ActiveWorkoutScreen in foreground with keepScreenOn=true
+        org.junit.Assert.assertTrue(hostView.keepScreenOn)
+
+        // Toggle setting off
+        keepOn = false
+        composeRule.waitForIdle()
+        org.junit.Assert.assertFalse(hostView.keepScreenOn)
+
+        // Toggle back on
+        keepOn = true
+        composeRule.waitForIdle()
+        org.junit.Assert.assertTrue(hostView.keepScreenOn)
+
+        // Navigate away (dispose ActiveWorkoutScreen)
+        showScreen = false
+        composeRule.waitForIdle()
+        org.junit.Assert.assertFalse(hostView.keepScreenOn)
     }
 }
