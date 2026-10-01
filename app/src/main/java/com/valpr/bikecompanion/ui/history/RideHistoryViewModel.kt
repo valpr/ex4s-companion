@@ -24,6 +24,9 @@ class RideHistoryViewModel(application: Application) : AndroidViewModel(applicat
     private val _selectedRide = MutableStateFlow<CompletedRide?>(null)
     val selectedRide: StateFlow<CompletedRide?> = _selectedRide.asStateFlow()
 
+    private val _isLoadingRide = MutableStateFlow(false)
+    val isLoadingRide: StateFlow<Boolean> = _isLoadingRide.asStateFlow()
+
     private val _pendingDelete = MutableStateFlow<RideHeader?>(null)
     val pendingDelete: StateFlow<RideHeader?> = _pendingDelete.asStateFlow()
 
@@ -38,8 +41,12 @@ class RideHistoryViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun selectRide(id: String) {
+        // Clear first so the detail screen shows loading, never a stale ride.
+        _selectedRide.value = null
+        _isLoadingRide.value = true
         viewModelScope.launch(Dispatchers.IO) {
             _selectedRide.value = historyRepository.loadRide(id)
+            _isLoadingRide.value = false
         }
     }
 

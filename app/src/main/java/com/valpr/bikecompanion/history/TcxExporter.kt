@@ -106,19 +106,24 @@ object TcxExporter {
             // Zero-length guard: at least one trackpoint so parsers accept the file.
             appendTrackpoint(sb, startMs, endMs, startMs, 0.0, 0, 0, 0)
         } else {
-            // Clamp every sample into [start, end]; drop out-of-order duplicates.
+            // Clamp every sample into [start, end] and collapse duplicate offsets.
+            // Distance integrates speed over each sample's actual time delta so
+            // gappy data stays consistent with the lap-level odometer total.
             var lastOffset = -1
             var distanceMeters = 0.0
+            var emitted = 0
             val sorted = samples.sortedBy { it.offsetSeconds }
             for (sample in sorted) {
                 val offset = sample.offsetSeconds.coerceIn(0, duration)
-                if (offset <= lastOffset && offset != duration) {
+                if (offset <= lastOffset) {
                     continue
                 }
+                // First point integrates from session start; later points from the previous one.
+                val dtSeconds = if (lastOffset < 0) offset else (offset - lastOffset).coerceAtLeast(0)
                 lastOffset = offset
                 // Approximate cumulative distance from speed when the bike odometer
                 // is unavailable per-sample (indoor, no GPS lat/lon by design).
-                distanceMeters += (sample.speedKmh.coerceAtLeast(0.0) * 1000.0 / 3600.0)
+                distanceMeters += sample.speedKmh.coerceAtLeast(0.0) * 1000.0 * dtSeconds / 3600.0
                 appendTrackpoint(
                     sb,
                     startMs,
@@ -128,6 +133,22 @@ object TcxExporter {
                     sample.cadenceRpm,
                     sample.heartRateBpm,
                     sample.watts
+                )
+                emitted++
+            }
+            if (emitted == 0 && sorted.isNotEmpty()) {
+                // Every sample collapsed (e.g. all offsets out-of-window): emit a
+                // single end-of-ride point from the last sample instead of nothing.
+                val last = sorted.last()
+                appendTrackpoint(
+                    sb,
+                    startMs,
+                    endMs,
+                    endMs,
+                    last.speedKmh.coerceAtLeast(0.0) * 1000.0 * duration / 3600.0,
+                    last.cadenceRpm,
+                    last.heartRateBpm,
+                    last.watts
                 )
             }
         }
@@ -163,9 +184,10 @@ object TcxExporter {
         if (cadenceRpm > 0) {
             sb.append("            <Cadence>").append(cadenceRpm.coerceIn(0, 300)).append("</Cadence>\n")
         }
-        if (heartRateBpm > 0) {
+        // Out-of-range HR (sensor noise) is omitted, never clamped into existence.
+        if (heartRateBpm in 30..250) {
             sb.append("            <HeartRateBpm><Value>")
-                .append(heartRateBpm.coerceIn(30, 250))
+                .append(heartRateBpm)
                 .append("</Value></HeartRateBpm>\n")
         }
         if (watts > 0) {

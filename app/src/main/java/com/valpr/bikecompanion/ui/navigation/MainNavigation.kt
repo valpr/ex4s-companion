@@ -82,11 +82,17 @@ fun MainNavigation(onRequestPermissions: () -> Unit, modifier: Modifier = Modifi
         }
 
         AppScreen.RIDE_DETAIL -> {
-            BackHandler { currentScreen = AppScreen.RIDE_HISTORY }
             val historyVm: com.valpr.bikecompanion.ui.history.RideHistoryViewModel = viewModel()
+            BackHandler {
+                historyVm.clearSelection()
+                currentScreen = AppScreen.RIDE_HISTORY
+            }
             com.valpr.bikecompanion.ui.history.RideDetailScreen(
                 viewModel = historyVm,
-                onNavigateBack = { currentScreen = AppScreen.RIDE_HISTORY },
+                onNavigateBack = {
+                    historyVm.clearSelection()
+                    currentScreen = AppScreen.RIDE_HISTORY
+                },
                 modifier = modifier
             )
         }

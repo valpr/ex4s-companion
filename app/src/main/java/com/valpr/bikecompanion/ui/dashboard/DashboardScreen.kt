@@ -150,7 +150,10 @@ fun DashboardScreen(
     // FTP Requirement Dialog
     if (showFtpPromptDialog) {
         AlertDialog(
-            onDismissRequest = { showFtpPromptDialog = false },
+            onDismissRequest = {
+                pendingWorkoutToStart = null
+                showFtpPromptDialog = false
+            },
             title = { Text("Set Athlete FTP") },
             text = {
                 Column {
@@ -191,7 +194,12 @@ fun DashboardScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showFtpPromptDialog = false }) {
+                TextButton(
+                    onClick = {
+                        pendingWorkoutToStart = null
+                        showFtpPromptDialog = false
+                    }
+                ) {
                     Text("Cancel")
                 }
             }

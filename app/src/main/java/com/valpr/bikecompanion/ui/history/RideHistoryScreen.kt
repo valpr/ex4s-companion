@@ -54,10 +54,8 @@ fun RideHistoryScreen(
     val pendingDelete by viewModel.pendingDelete.collectAsState()
     val bests = HistoryStats.personalBests(headers)
     val totals = HistoryStats.totals(headers)
-    val weekMs = 7L * 24 * 60 * 60 * 1000
-    val nowMs = System.currentTimeMillis()
-    val weekStart = nowMs - (nowMs % weekMs)
-    val weekly = HistoryStats.weeklyVolume(headers, weekStart)
+    // Rolling trailing-7-day window matching the "Rides / 7d" label.
+    val weekly = HistoryStats.weeklyVolume(headers, System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000)
 
     pendingDelete?.let { header ->
         AlertDialog(

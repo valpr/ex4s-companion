@@ -23,6 +23,7 @@ object TcxShareHelper {
 
     private fun stageAndShare(context: Context, fileName: String, tcx: String, workoutName: String) {
         val dir = File(context.cacheDir, "tcx").apply { mkdirs() }
+        pruneCache(dir)
         val file = File(dir, fileName)
         file.writeText(tcx, Charsets.UTF_8)
 
@@ -35,5 +36,19 @@ object TcxShareHelper {
         val chooser = Intent.createChooser(intent, "Export $workoutName (.tcx)")
         chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(chooser)
+    }
+
+    /** Drops staged exports older than 7 days so repeat shares don't accumulate. */
+    private fun pruneCache(dir: File) {
+        val cutoff = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
+        try {
+            dir.listFiles()?.forEach { file ->
+                if (file.isFile && file.lastModified() < cutoff) {
+                    file.delete()
+                }
+            }
+        } catch (_: Exception) {
+            // Best-effort cache hygiene; never block sharing.
+        }
     }
 }

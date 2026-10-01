@@ -123,19 +123,28 @@ data class CompletedRide(
     companion object {
         fun rideIdFor(startTimeEpochMs: Long): String = "ride_$startTimeEpochMs"
 
+        /**
+         * Stable id for sessions with no start timestamp (never happens for real
+         * sessions — the manager always stamps start — but keeps re-saves of the
+         * same zero-start summary idempotent instead of minting a fresh id per call).
+         */
+        fun fallbackIdFor(summary: WorkoutSummary): String {
+            val hash = summary.workoutName.hashCode() * 31 +
+                summary.totalDurationSeconds * 31 +
+                summary.samples.hashCode()
+            return "ride_h" + hash.toUInt().toString()
+        }
+
         fun fromSummary(summary: WorkoutSummary, sourceWorkoutFilename: String? = null): CompletedRide {
-            val startMs = if (summary.startTimeEpochMs > 0L) {
-                summary.startTimeEpochMs
-            } else {
-                System.currentTimeMillis()
-            }
+            val rawStart = summary.startTimeEpochMs
+            val id = if (rawStart > 0L) rideIdFor(rawStart) else fallbackIdFor(summary)
             // Clamp zero-length sessions to a ≥1s window (same rule as Health Connect).
             val duration = summary.totalDurationSeconds.coerceAtLeast(1)
             return CompletedRide(
-                id = rideIdFor(startMs),
+                id = id,
                 workoutName = summary.workoutName.ifBlank { "Free Ride" },
                 sourceWorkoutFilename = sourceWorkoutFilename,
-                startTimeEpochMs = startMs,
+                startTimeEpochMs = rawStart.coerceAtLeast(0L),
                 totalDurationSeconds = duration,
                 totalDistanceKm = summary.totalDistanceKm.coerceAtLeast(0.0),
                 avgWatts = summary.avgWatts,

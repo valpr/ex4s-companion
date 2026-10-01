@@ -93,6 +93,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 _selectedWorkoutPreview.value = result.getOrNull()
                 _selectedWorkoutFilename.value = filename
             } else {
+                _selectedWorkoutPreview.value = null
                 _selectedWorkoutFilename.value = null
                 _errorMessage.value = "Failed to load workout: ${result.exceptionOrNull()?.message}"
             }

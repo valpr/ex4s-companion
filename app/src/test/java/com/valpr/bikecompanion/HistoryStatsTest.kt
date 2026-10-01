@@ -95,6 +95,8 @@ class HistoryStatsTest {
     @Test
     fun formatDuration_hoursAndMinutes() {
         assertEquals("1h 05m", HistoryStats.formatDuration(3900))
-        assertEquals("25m", HistoryStats.formatDuration(1500))
+        assertEquals("25:00", HistoryStats.formatDuration(1500))
+        assertEquals("1:30", HistoryStats.formatDuration(90))
+        assertEquals("0:45", HistoryStats.formatDuration(45))
     }
 }

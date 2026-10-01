@@ -161,4 +161,63 @@ class WorkoutHistoryRepositoryTest {
         val headers = repository.listHeaders()
         assertEquals(1, headers[0].totalDurationSeconds)
     }
+
+    @Test
+    fun save_zeroStartTimestamp_isStablyIdempotent() {
+        val summary = sampleSummary(startMs = 0L)
+        assertTrue(repository.save(summary))
+        assertFalse(repository.save(summary))
+
+        assertEquals(1, repository.listHeaders().size)
+    }
+
+    @Test
+    fun listHeaders_orphanedFile_healsIndex() {
+        repository.save(sampleSummary(name = "Ride A", startMs = 1_700_000_000_000L))
+        repository.save(sampleSummary(name = "Ride B", startMs = 1_700_000_001_000L))
+        // Simulate a crash between file write and index update: drop B from the index.
+        // B is newest, so its entry leads the array; strip it plus the separator.
+        val indexFile = File(tempDir, WorkoutHistoryRepository.INDEX_FILENAME)
+        val rideBId = repository.listHeaders().first { it.workoutName == "Ride B" }.id
+        val stored = kotlinx.serialization.json.Json.decodeFromString(
+            kotlinx.serialization.builtins.ListSerializer(
+                com.valpr.bikecompanion.history.RideHeader.serializer()
+            ),
+            indexFile.readText(Charsets.UTF_8)
+        ).filter { it.id != rideBId }
+        indexFile.writeText(
+            kotlinx.serialization.json.Json.encodeToString(
+                kotlinx.serialization.builtins.ListSerializer(
+                    com.valpr.bikecompanion.history.RideHeader.serializer()
+                ),
+                stored
+            ),
+            Charsets.UTF_8
+        )
+        // Sanity: B's entry is gone from the raw index while its file remains.
+        assertFalse(indexFile.readText(Charsets.UTF_8).contains(rideBId))
+        assertTrue(File(tempDir, "$rideBId.json").exists())
+
+        val headers = repository.listHeaders()
+        assertEquals(2, headers.size)
+        assertTrue(headers.map { it.workoutName }.contains("Ride B"))
+        // Index repaired: a second read still sees both without rescanning luck.
+        assertEquals(2, repository.listHeaders().size)
+    }
+
+    @Test
+    fun loadRide_corruptFile_evictsFromList() {
+        repository.save(sampleSummary())
+        val id = repository.listHeaders().single().id
+        File(tempDir, "$id.json").writeText("corrupt", Charsets.UTF_8)
+
+        assertNull(repository.loadRide(id))
+        // List and detail agree again: the garbage record is gone.
+        assertTrue(repository.listHeaders().isEmpty())
+    }
+
+    @Test
+    fun delete_missing_returnsFalse() {
+        assertFalse(repository.delete("ride_0"))
+    }
 }

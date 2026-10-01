@@ -72,12 +72,14 @@ object HistoryStats {
     }
 
     fun formatDuration(totalSeconds: Int): String {
-        val hours = totalSeconds / 3600
-        val minutes = (totalSeconds % 3600) / 60
+        val seconds = totalSeconds.coerceAtLeast(0)
+        val hours = seconds / 3600
+        val minutes = (seconds % 3600) / 60
+        val remainder = seconds % 60
         return if (hours > 0) {
             "%dh %02dm".format(hours, minutes)
         } else {
-            "%dm".format(minutes)
+            "%d:%02d".format(minutes, remainder)
         }
     }
 

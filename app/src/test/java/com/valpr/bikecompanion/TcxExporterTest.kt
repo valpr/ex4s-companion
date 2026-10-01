@@ -67,6 +67,42 @@ class TcxExporterTest {
     }
 
     @Test
+    fun export_implausibleHr_omittedRatherThanClamped() {
+        val noisy = ride().copy(samples = ride().samples.map { it.copy(heartRateBpm = 12) })
+        val tcx = TcxExporter.export(noisy)
+
+        assertFalse(tcx.contains("HeartRateBpm"))
+        assertFalse(tcx.contains("<Value>30</Value>"))
+    }
+
+    @Test
+    fun export_gappySamples_distanceIntegratesOverActualDeltas() {
+        // Offsets 1, 2, 10 at 36 km/h (10 m/s): 10 + 10 + 80 = 100 m total.
+        val gappy = ride(duration = 10).copy(
+            samples = listOf(1, 2, 10).map {
+                StoredSample(elapsedSeconds = it, watts = 150, cadenceRpm = 85, speedKmh = 36.0, heartRateBpm = 140)
+            }
+        )
+        val tcx = TcxExporter.export(gappy)
+
+        assertEquals(3, tcx.split("<Trackpoint>").size - 1)
+        assertTrue(tcx.contains("<DistanceMeters>100.00</DistanceMeters>"))
+    }
+
+    @Test
+    fun export_allSamplesOutOfWindow_collapsesToSingleEndPoint() {
+        val overrun = ride(duration = 5).copy(
+            samples = listOf(5000, 6000).map {
+                StoredSample(elapsedSeconds = it, watts = 99, cadenceRpm = 80, speedKmh = 20.0, heartRateBpm = 130)
+            }
+        )
+        val tcx = TcxExporter.export(overrun)
+
+        assertEquals(1, tcx.split("<Trackpoint>").size - 1)
+        assertTrue(tcx.contains("<Watts>99</Watts>"))
+    }
+
+    @Test
     fun export_emptySamples_emitsSingleTrackpoint() {
         val tcx = TcxExporter.export(ride().copy(samples = emptyList()))
 
@@ -107,6 +143,16 @@ class TcxExporterTest {
             "beginner_04_ready_for_more.zwo",
             BeginnerFilenameMatcher.filenameFor("Ready for More (30 min) - Beginner 4/4", 1800)
         )
+        assertEquals(
+            "sweet_spot_intervals.zwo",
+            BeginnerFilenameMatcher.filenameFor("Sweet Spot Intervals (30 min)", 2040)
+        )
+    }
+
+    @Test
+    fun matcher_shortAttempt_doesNotCount() {
+        // Quit 5 minutes into a 15-minute level: persisted, but not Beginner credit.
+        assertNull(BeginnerFilenameMatcher.filenameFor("First Pedals (15 min) - Beginner 1/4", 300))
     }
 
     @Test
