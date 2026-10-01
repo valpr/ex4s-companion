@@ -64,6 +64,25 @@ class WearMessageListenerService : WearableListenerService() {
                 else -> ServiceAction.NONE
             }
         }
+
+        /**
+         * Pure edge-trigger for bailout alert notifications (JVM-testable).
+         * Returns true only on entry into bailout, not on every 1Hz telemetry
+         * tick while already in bailout — prevents NotificationManager spam.
+         */
+        fun shouldPostBailoutAlert(state: WorkoutStateMessage, previous: WorkoutStateMessage?): Boolean {
+            val nowActive = state.isBailoutActive || state.isCadenceFloorActive
+            if (!nowActive) return false
+            val wasActive = previous?.isBailoutActive == true || previous?.isCadenceFloorActive == true
+            return !wasActive
+        }
+
+        /**
+         * Pure edge-trigger for completion notification/haptic (JVM-testable).
+         * Returns true only on entry into COMPLETED, not on repeated
+         * COMPLETED broadcasts.
+         */
+        fun shouldPostCompletion(state: WorkoutStateMessage, previous: WorkoutStateMessage?): Boolean = state.isCompleted && previous?.isCompleted != true
     }
 
     override fun onMessageReceived(messageEvent: MessageEvent) {
@@ -77,19 +96,43 @@ class WearMessageListenerService : WearableListenerService() {
             app?.messageManager?.updatePhoneNode(messageEvent.sourceNodeId)
         }
 
-        // 1. Play haptics directly even if MainActivity is not in foreground
+        // 1. Play haptics directly even if MainActivity is not in foreground.
+        // Haptic path is haptic-only: notifications are owned by the state path
+        // below, which carries authoritative workoutName/elapsedSeconds.
         if (messageEvent.path == WearableProtocol.PATH_HAPTIC_TRIGGER) {
             val alert = HapticAlertType.fromByteArray(messageEvent.data)
             if (alert != null) {
                 app?.hapticManager?.playAlert(alert)
+                if (alert == HapticAlertType.RESUME_TRIGGERED) {
+                    com.valpr.bikecompanion.wear.service.WearNotificationHelper.cancelBailoutNotification(this)
+                }
             }
         }
 
-        // 2. Immediately forward incoming workout state to WearMessageManager
+        // 2. Immediately forward incoming workout state to WearMessageManager.
+        // Notifications are edge-triggered on entry transitions only, so steady
+        // 1Hz telemetry does not spam NotificationManager.
         if (messageEvent.path == WearableProtocol.PATH_WORKOUT_STATE) {
             val state = WorkoutStateMessage.fromByteArray(messageEvent.data)
             if (state != null) {
                 app?.messageManager?.updateWorkoutState(state)
+                if (shouldPostCompletion(state, previousState)) {
+                    com.valpr.bikecompanion.wear.service.WearNotificationHelper.cancelBailoutNotification(this)
+                    com.valpr.bikecompanion.wear.service.WearNotificationHelper.postWorkoutCompletedNotification(
+                        context = this,
+                        workoutName = state.workoutName,
+                        elapsedSeconds = state.elapsedSeconds
+                    )
+                    app?.hapticManager?.playAlert(HapticAlertType.WORKOUT_COMPLETED)
+                } else if (shouldPostBailoutAlert(state, previousState)) {
+                    com.valpr.bikecompanion.wear.service.WearNotificationHelper.postBailoutNotification(
+                        context = this,
+                        isCadenceFloor = state.isCadenceFloorActive
+                    )
+                } else if (state.isRunning || state.isPaused) {
+                    com.valpr.bikecompanion.wear.service.WearNotificationHelper.cancelBailoutNotification(this)
+                    com.valpr.bikecompanion.wear.service.WearNotificationHelper.cancelWorkoutCompletedNotification(this)
+                }
             }
         }
 

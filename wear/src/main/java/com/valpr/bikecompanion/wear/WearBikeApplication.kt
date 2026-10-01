@@ -24,6 +24,7 @@ class WearBikeApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        com.valpr.bikecompanion.wear.service.WearNotificationHelper.createNotificationChannel(this)
         hapticManager = WatchHapticManager(applicationContext)
         messageManager = WearMessageManager(applicationContext, hapticManager)
         healthServicesManager =

@@ -49,6 +49,16 @@ class WearMessageRouterTest {
             WearMessageRouter.Action.PlayHaptic(HapticAlertType.BAILOUT_TRIGGERED),
             action
         )
+
+        val completedAction =
+            WearMessageRouter.route(
+                WearableProtocol.PATH_HAPTIC_TRIGGER,
+                HapticAlertType.WORKOUT_COMPLETED.toByteArray()
+            )
+        assertEquals(
+            WearMessageRouter.Action.PlayHaptic(HapticAlertType.WORKOUT_COMPLETED),
+            completedAction
+        )
     }
 
     @Test

@@ -209,7 +209,8 @@ data class WorkoutStateMessage(
 enum class HapticAlertType(val id: Byte) {
     CRITICAL_HR_WARNING(0x01),
     BAILOUT_TRIGGERED(0x02),
-    RESUME_TRIGGERED(0x03);
+    RESUME_TRIGGERED(0x03),
+    WORKOUT_COMPLETED(0x04);
 
     fun toByteArray(): ByteArray = byteArrayOf(id)
 
@@ -220,6 +221,7 @@ enum class HapticAlertType(val id: Byte) {
                 CRITICAL_HR_WARNING.id -> CRITICAL_HR_WARNING
                 BAILOUT_TRIGGERED.id -> BAILOUT_TRIGGERED
                 RESUME_TRIGGERED.id -> RESUME_TRIGGERED
+                WORKOUT_COMPLETED.id -> WORKOUT_COMPLETED
                 else -> null
             }
         }

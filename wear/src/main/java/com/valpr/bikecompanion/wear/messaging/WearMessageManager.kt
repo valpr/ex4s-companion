@@ -225,6 +225,10 @@ class WearMessageManager(
         if (!WearMessageRouter.canSend(target)) return
         val nodeId = target!!
         hapticManager.playAlert(HapticAlertType.BAILOUT_TRIGGERED)
+        com.valpr.bikecompanion.wear.service.WearNotificationHelper.postBailoutNotification(
+            context,
+            isCadenceFloor = false
+        )
         scope.launch {
             try {
                 Tasks.await(
@@ -249,6 +253,7 @@ class WearMessageManager(
         if (!WearMessageRouter.canSend(target)) return
         val nodeId = target!!
         hapticManager.playAlert(HapticAlertType.RESUME_TRIGGERED)
+        com.valpr.bikecompanion.wear.service.WearNotificationHelper.cancelBailoutNotification(context)
         scope.launch {
             try {
                 Tasks.await(

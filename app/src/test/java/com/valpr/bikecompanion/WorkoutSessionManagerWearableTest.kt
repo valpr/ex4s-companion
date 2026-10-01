@@ -147,6 +147,49 @@ class WorkoutSessionManagerWearableTest {
     }
 
     @Test
+    fun testStopWorkout_emitsWorkoutCompletedHaptic() = runTest {
+        val manager = createSessionManager()
+        settleManager()
+
+        manager.hapticAlerts.test {
+            manager.startWorkout(null)
+            manager.stopWorkout()
+            assertEquals(HapticAlertType.WORKOUT_COMPLETED, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun testStopWorkout_idempotent_secondStopEmitsNothing() = runTest {
+        val manager = createSessionManager()
+        settleManager()
+
+        manager.hapticAlerts.test {
+            manager.startWorkout(null)
+            manager.stopWorkout()
+            assertEquals(HapticAlertType.WORKOUT_COMPLETED, awaitItem())
+            // Second stop (double-tap / auto-finish + manual) must not re-emit.
+            manager.stopWorkout()
+            expectNoEvents()
+            assertEquals(SessionStatus.COMPLETED, manager.sessionState.value.status)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun testStopWorkout_fromIdle_emitsNothing() = runTest {
+        val manager = createSessionManager()
+        settleManager()
+
+        manager.hapticAlerts.test {
+            manager.stopWorkout()
+            expectNoEvents()
+            assertEquals(SessionStatus.IDLE, manager.sessionState.value.status)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun testCadenceFloorBailout_emitsHapticOnce() = runTest {
         telemetryFlow.value = BikeTelemetry(cadenceRpm = 85, estimatedWatts = 180, resistanceLevel = 14)
         val manager = createSessionManager()

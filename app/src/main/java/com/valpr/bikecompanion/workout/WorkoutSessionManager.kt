@@ -324,8 +324,11 @@ class WorkoutSessionManager(
     }
 
     fun stopWorkout() {
-        stopSessionLoop()
         val currentState = _sessionState.value
+        if (currentState.status == SessionStatus.IDLE || currentState.status == SessionStatus.COMPLETED) {
+            return
+        }
+        stopSessionLoop()
         val summary = generateSummary(currentState)
         _sessionState.update {
             it.copy(
@@ -333,6 +336,7 @@ class WorkoutSessionManager(
                 summary = summary
             )
         }
+        _hapticAlerts.tryEmit(HapticAlertType.WORKOUT_COMPLETED)
     }
 
     fun resetToIdle() {

@@ -81,6 +81,7 @@ class WearWorkoutTrackingService : LifecycleService() {
                 observeWorkoutState()
             }
             ACTION_STOP -> {
+                WearNotificationHelper.cancelBailoutNotification(this)
                 stopTracking()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
@@ -145,6 +146,8 @@ class WearWorkoutTrackingService : LifecycleService() {
 
         observeJob =
             lifecycleScope.launch {
+                var wasBailoutAlertActive = false
+                var wasCompletionPosted = false
                 combine(
                     messageManager.workoutState,
                     healthManager.currentHeartRate
@@ -166,11 +169,43 @@ class WearWorkoutTrackingService : LifecycleService() {
 
                     if (shouldStopTracking(state)) {
                         Log.i(TAG, "Workout state became idle/completed, stopping service")
+                        if (wasBailoutAlertActive) {
+                            WearNotificationHelper.cancelBailoutNotification(this@WearWorkoutTrackingService)
+                            wasBailoutAlertActive = false
+                        }
+                        if (state.isCompleted && !wasCompletionPosted) {
+                            WearNotificationHelper.postWorkoutCompletedNotification(
+                                context = this@WearWorkoutTrackingService,
+                                workoutName = state.workoutName,
+                                elapsedSeconds = state.elapsedSeconds
+                            )
+                            wasCompletionPosted = true
+                        }
                         stopTracking()
                         stopForeground(STOP_FOREGROUND_REMOVE)
                         stopSelf()
                         return@collectLatest
                     }
+
+                    if (state.isRunning) {
+                        if (wasCompletionPosted) {
+                            WearNotificationHelper.cancelWorkoutCompletedNotification(this@WearWorkoutTrackingService)
+                            wasCompletionPosted = false
+                        }
+                    }
+
+                    // Edge-triggered bailout alert: post once on entry, cancel once on exit.
+                    // Steady 1Hz telemetry while in/out of bailout must not hit NotificationManager.
+                    val isAlertActive = state.isBailoutActive || state.isCadenceFloorActive
+                    if (isAlertActive && !wasBailoutAlertActive) {
+                        WearNotificationHelper.postBailoutNotification(
+                            context = this@WearWorkoutTrackingService,
+                            isCadenceFloor = state.isCadenceFloorActive
+                        )
+                    } else if (!isAlertActive && wasBailoutAlertActive) {
+                        WearNotificationHelper.cancelBailoutNotification(this@WearWorkoutTrackingService)
+                    }
+                    wasBailoutAlertActive = isAlertActive
 
                     val title =
                         if (state.workoutName.isNotBlank()) {
@@ -179,7 +214,13 @@ class WearWorkoutTrackingService : LifecycleService() {
                             getString(R.string.wear_notification_title)
                         }
                     val hrToDisplay = if (liveHr > 0) liveHr else state.heartRateBpm
-                    val content = WearNotificationHelper.formatContent(state.elapsedSeconds, hrToDisplay)
+                    val content =
+                        WearNotificationHelper.formatContent(
+                            elapsedSeconds = state.elapsedSeconds,
+                            heartRateBpm = hrToDisplay,
+                            isBailoutActive = state.isBailoutActive,
+                            isCadenceFloorActive = state.isCadenceFloorActive
+                        )
 
                     val updatedNotification =
                         WearNotificationHelper.buildNotification(

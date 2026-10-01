@@ -3,4 +3,9 @@
     <string name="wear_notification_channel_name">Workout Tracking</string>
     <string name="wear_notification_channel_desc">Shows when a bike workout is actively tracking heart rate</string>
     <string name="wear_notification_title">Workout Active</string>
+    <string name="wear_alert_channel_name">Workout Alerts</string>
+    <string name="wear_alert_channel_desc">Alerts for ERG bailouts and workout completion</string>
+    <string name="wear_notification_cadence_bailout_title">Cadence Floor Bailout</string>
+    <string name="wear_notification_erg_suspended_title">ERG Suspended</string>
+    <string name="wear_notification_completed_title">Workout Complete!</string>
 </resources>

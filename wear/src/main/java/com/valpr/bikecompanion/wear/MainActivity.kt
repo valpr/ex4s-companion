@@ -32,6 +32,7 @@ import com.valpr.bikecompanion.wear.ui.screens.ActiveTelemetryScreen
 import com.valpr.bikecompanion.wear.ui.screens.BailoutOverlay
 import com.valpr.bikecompanion.wear.ui.screens.ResumeSlapOverlay
 import com.valpr.bikecompanion.wear.ui.screens.StandbyScreen
+import com.valpr.bikecompanion.wear.ui.screens.WorkoutCompletedOverlay
 import com.valpr.bikecompanion.wear.ui.theme.BikeCompanionWearTheme
 
 class MainActivity : ComponentActivity() {
@@ -104,6 +105,18 @@ fun WearApp(messageManager: WearMessageManager, healthServicesManager: HealthSer
     val isPhoneConnected by messageManager.isPhoneConnected.collectAsState()
     val workoutState by messageManager.workoutState.collectAsState()
     val liveHr by healthServicesManager.currentHeartRate.collectAsState()
+
+    // Dismiss key is stable while COMPLETED (name + frozen elapsed), but resets
+    // for each new workout completion. Keying on sessionStatus alone would leak
+    // dismissal across back-to-back completions; keying on the whole state would
+    // reset on every 1Hz tick while running.
+    val completionKey =
+        if (workoutState?.isCompleted == true) {
+            "completed|${workoutState?.workoutName}|${workoutState?.elapsedSeconds}"
+        } else {
+            workoutState?.sessionStatus.toString()
+        }
+    var isCompletionDismissed by remember(completionKey) { mutableStateOf(false) }
 
     val focusRequester = remember { FocusRequester() }
     val rotaryBailout = remember { com.valpr.bikecompanion.shared.RotaryBailoutAccumulator() }
@@ -181,6 +194,18 @@ fun WearApp(messageManager: WearMessageManager, healthServicesManager: HealthSer
                     currentHeartRate = if (liveHr > 0) liveHr else state.heartRateBpm,
                     isAmbient = isAmbient,
                     onBailoutTriggered = { messageManager.sendRotaryBailout() }
+                )
+            }
+
+            // Completed Workout -> Completion overlay
+            state != null && state.isCompleted && !isCompletionDismissed -> {
+                WorkoutCompletedOverlay(
+                    workoutState = state,
+                    currentHeartRate = if (liveHr > 0) liveHr else state.heartRateBpm,
+                    onDismiss = {
+                        isCompletionDismissed = true
+                        com.valpr.bikecompanion.wear.service.WearNotificationHelper.cancelWorkoutCompletedNotification(context)
+                    }
                 )
             }
 

@@ -171,6 +171,57 @@ class WakeFilterTest {
         )
     }
 
+    private fun message(
+        status: Int = WorkoutStateMessage.STATUS_RUNNING,
+        bailout: Boolean = false,
+        floor: Boolean = false
+    ) = WorkoutStateMessage(
+        sessionStatus = status,
+        elapsedSeconds = 60,
+        targetWatts = 200,
+        currentWatts = 195,
+        cadenceRpm = 85,
+        heartRateBpm = 140,
+        isBailoutActive = bailout,
+        isCadenceFloorActive = floor,
+        isHrCapped = false,
+        workoutName = "Test"
+    )
+
+    @Test
+    fun shouldPostBailoutAlert_entryOnly_notSteadyState() {
+        val bailout = message(bailout = true)
+        // First entry (no previous, or previous clean) posts.
+        assertTrue(WearMessageListenerService.shouldPostBailoutAlert(bailout, null))
+        assertTrue(
+            WearMessageListenerService.shouldPostBailoutAlert(bailout, message())
+        )
+        // RepeatedTicks while already in bailout must not re-post.
+        assertFalse(
+            WearMessageListenerService.shouldPostBailoutAlert(bailout, message(bailout = true))
+        )
+        assertFalse(
+            WearMessageListenerService.shouldPostBailoutAlert(bailout, message(floor = true))
+        )
+        // Clean state never posts.
+        assertFalse(WearMessageListenerService.shouldPostBailoutAlert(message(), message(bailout = true)))
+        assertFalse(WearMessageListenerService.shouldPostBailoutAlert(message(), null))
+    }
+
+    @Test
+    fun shouldPostCompletion_entryOnly_notRepeated() {
+        val completed = message(status = WorkoutStateMessage.STATUS_COMPLETED)
+        assertTrue(WearMessageListenerService.shouldPostCompletion(completed, null))
+        assertTrue(WearMessageListenerService.shouldPostCompletion(completed, message()))
+        assertFalse(
+            WearMessageListenerService.shouldPostCompletion(
+                completed,
+                message(status = WorkoutStateMessage.STATUS_COMPLETED)
+            )
+        )
+        assertFalse(WearMessageListenerService.shouldPostCompletion(message(), null))
+    }
+
     @Test
     fun resolveServiceAction_runningAndPaused_returnStart() {
         org.junit.Assert.assertEquals(
