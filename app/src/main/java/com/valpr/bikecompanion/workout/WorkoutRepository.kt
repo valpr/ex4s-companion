@@ -16,7 +16,8 @@ data class CachedWorkoutHeader(
     val durationSeconds: Int,
     val estimatedTss: Double,
     val fileSizeBytes: Long,
-    val lastModifiedMs: Long
+    val lastModifiedMs: Long,
+    val tags: List<String> = emptyList()
 )
 
 /**
@@ -51,7 +52,8 @@ class WorkoutRepository(private val workoutDirectory: File) {
                         durationSeconds = workout.totalDurationSeconds,
                         estimatedTss = workout.estimatedTss,
                         fileSizeBytes = file.length(),
-                        lastModifiedMs = file.lastModified()
+                        lastModifiedMs = file.lastModified(),
+                        tags = workout.tags
                     )
                 }
             } catch (_: Exception) {

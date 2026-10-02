@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.valpr.bikecompanion.shared.AthleteMetrics
 import com.valpr.bikecompanion.shared.BiologicalSex
@@ -45,6 +46,7 @@ data class UserProfile(
     val beginnerPathDismissed: Boolean = false,
     val beginnerPathCollapsed: Boolean = false,
     val useKarvonenZones: Boolean = false,
+    val favoriteWorkoutFilenames: Set<String> = emptySet(),
     val lastUpdatedEpochMs: Long = 0L
 ) {
     /**
@@ -101,6 +103,7 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
         val KEY_BEGINNER_PATH_DISMISSED = booleanPreferencesKey("beginner_path_dismissed")
         val KEY_BEGINNER_PATH_COLLAPSED = booleanPreferencesKey("beginner_path_collapsed")
         val KEY_USE_KARVONEN_ZONES = booleanPreferencesKey("use_karvonen_zones")
+        val KEY_FAVORITE_WORKOUTS = stringSetPreferencesKey("favorite_workout_filenames")
         val KEY_LAST_UPDATED = longPreferencesKey("profile_last_updated_epoch_ms")
 
         const val DEFAULT_WEIGHT_KG = 75.0f
@@ -156,6 +159,7 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
                 beginnerPathDismissed = preferences[KEY_BEGINNER_PATH_DISMISSED] ?: DEFAULT_BEGINNER_PATH_DISMISSED,
                 beginnerPathCollapsed = preferences[KEY_BEGINNER_PATH_COLLAPSED] ?: DEFAULT_BEGINNER_PATH_COLLAPSED,
                 useKarvonenZones = preferences[KEY_USE_KARVONEN_ZONES] ?: DEFAULT_USE_KARVONEN_ZONES,
+                favoriteWorkoutFilenames = preferences[KEY_FAVORITE_WORKOUTS] ?: emptySet(),
                 lastUpdatedEpochMs = preferences[KEY_LAST_UPDATED] ?: 0L
             )
         }
@@ -281,6 +285,32 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun updateBeginnerPathCollapsed(collapsed: Boolean) {
         dataStore.edit { preferences ->
             preferences[KEY_BEGINNER_PATH_COLLAPSED] = collapsed
+        }
+    }
+
+    suspend fun toggleFavoriteWorkout(filename: String) {
+        dataStore.edit { preferences ->
+            val current = preferences[KEY_FAVORITE_WORKOUTS] ?: emptySet()
+            val normalized = filename.lowercase()
+            val updated = if (current.any { it.equals(normalized, ignoreCase = true) }) {
+                current.filterNot { it.equals(normalized, ignoreCase = true) }.toSet()
+            } else {
+                current + normalized
+            }
+            preferences[KEY_FAVORITE_WORKOUTS] = updated
+            preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
+        }
+    }
+
+    suspend fun removeFavoriteWorkout(filename: String) {
+        dataStore.edit { preferences ->
+            val current = preferences[KEY_FAVORITE_WORKOUTS] ?: emptySet()
+            val normalized = filename.lowercase()
+            if (current.any { it.equals(normalized, ignoreCase = true) }) {
+                preferences[KEY_FAVORITE_WORKOUTS] =
+                    current.filterNot { it.equals(normalized, ignoreCase = true) }.toSet()
+                preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
+            }
         }
     }
 }

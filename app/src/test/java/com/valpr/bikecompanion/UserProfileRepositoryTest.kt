@@ -157,4 +157,35 @@ class UserProfileRepositoryTest {
         assertEquals(180.0f, p.heightCm, 0.001f)
         assertTrue(p.lastUpdatedEpochMs >= before)
     }
+
+    @Test
+    fun toggleFavoriteWorkout_addsAndRemoves() = runTest {
+        val r = repo()
+        assertTrue(r.userProfileFlow.first().favoriteWorkoutFilenames.isEmpty())
+
+        r.toggleFavoriteWorkout("sweet_spot.zwo")
+        assertTrue(r.userProfileFlow.first().favoriteWorkoutFilenames.contains("sweet_spot.zwo"))
+
+        // Toggling same file removes it
+        r.toggleFavoriteWorkout("sweet_spot.zwo")
+        assertFalse(r.userProfileFlow.first().favoriteWorkoutFilenames.contains("sweet_spot.zwo"))
+    }
+
+    @Test
+    fun removeFavoriteWorkout_explicitRemoval() = runTest {
+        val r = repo()
+        r.toggleFavoriteWorkout("workout_a.zwo")
+        r.toggleFavoriteWorkout("workout_b.zwo")
+        assertEquals(2, r.userProfileFlow.first().favoriteWorkoutFilenames.size)
+
+        r.removeFavoriteWorkout("workout_a.zwo")
+        val favs = r.userProfileFlow.first().favoriteWorkoutFilenames
+        assertEquals(1, favs.size)
+        assertFalse(favs.contains("workout_a.zwo"))
+        assertTrue(favs.contains("workout_b.zwo"))
+
+        // Removing non-existent is a no-op
+        r.removeFavoriteWorkout("non_existent.zwo")
+        assertEquals(1, r.userProfileFlow.first().favoriteWorkoutFilenames.size)
+    }
 }

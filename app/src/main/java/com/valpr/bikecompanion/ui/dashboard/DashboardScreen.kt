@@ -8,6 +8,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,13 +20,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.Close
@@ -33,13 +40,20 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -70,8 +84,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -82,8 +99,11 @@ import com.valpr.bikecompanion.ui.components.WorkoutCanvasProfile
 import com.valpr.bikecompanion.workout.BeginnerPlan
 import com.valpr.bikecompanion.workout.CachedWorkoutHeader
 import com.valpr.bikecompanion.workout.SessionStatus
+import com.valpr.bikecompanion.workout.TagCount
 import com.valpr.bikecompanion.workout.Workout
+import com.valpr.bikecompanion.workout.WorkoutDurationBracket
 import com.valpr.bikecompanion.workout.WorkoutSessionState
+import com.valpr.bikecompanion.workout.WorkoutSortOption
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -103,6 +123,12 @@ fun DashboardScreen(
     val telemetry by viewModel.bleManager.telemetry.collectAsState()
     val discoveredDevices by viewModel.bleManager.discoveredDevices.collectAsState()
     val cachedWorkouts by viewModel.cachedWorkouts.collectAsState()
+    val displayedWorkouts by viewModel.displayedWorkouts.collectAsState()
+    val selectedTagFilter by viewModel.selectedTagFilter.collectAsState()
+    val selectedSortOption by viewModel.selectedSortOption.collectAsState()
+    val selectedDurationBracket by viewModel.selectedDurationBracket.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
+    val availableTagCounts by viewModel.availableTagCounts.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
     val sessionState by viewModel.sessionState.collectAsState()
     val watchState by viewModel.watchState.collectAsState()
@@ -111,6 +137,7 @@ fun DashboardScreen(
     val errorMessage by viewModel.errorMessage.collectAsState()
     val historyHeaders by viewModel.historyHeaders.collectAsState()
     val completedFilenames by viewModel.completedFilenames.collectAsState()
+    val completionCountMap by viewModel.completionCountMap.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.loadHistory()
@@ -467,45 +494,39 @@ fun DashboardScreen(
                 }
             }
 
-            // 5. Workout Library Header
+            // 5. Workout Library Header & Actions
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "Workout Library",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    OutlinedButton(
-                        onClick = { onEditWorkout(null) },
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("New", fontSize = 12.sp)
-                    }
-
-                    OutlinedButton(
-                        onClick = {
-                            importPickerLauncher.launch(
-                                arrayOf(
-                                    "application/xml",
-                                    "text/xml",
-                                    "application/octet-stream",
-                                    "*/*"
-                                )
+                WorkoutLibraryHeader(
+                    onNewWorkout = { onEditWorkout(null) },
+                    onImportWorkout = {
+                        importPickerLauncher.launch(
+                            arrayOf(
+                                "application/xml",
+                                "text/xml",
+                                "application/octet-stream",
+                                "*/*"
                             )
-                        },
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Import .zwo", fontSize = 12.sp)
-                    }
+                        )
+                    },
+                    searchQuery = searchQuery,
+                    onSearchQueryChange = { viewModel.setSearchQuery(it) },
+                    selectedSortOption = selectedSortOption,
+                    onSelectSortOption = { viewModel.setSortOption(it) },
+                    selectedDurationBracket = selectedDurationBracket,
+                    onSelectDurationBracket = { viewModel.setDurationBracket(it) },
+                    showFilters = cachedWorkouts.isNotEmpty()
+                )
+            }
+
+            // 5b. Tag Filter Chips Row (shown if workouts exist)
+            if (cachedWorkouts.isNotEmpty() && availableTagCounts.isNotEmpty()) {
+                item {
+                    TagFilterRow(
+                        tags = availableTagCounts,
+                        selectedTag = selectedTagFilter,
+                        totalWorkoutsCount = cachedWorkouts.size,
+                        onSelectTag = { viewModel.setTagFilter(it) }
+                    )
                 }
             }
 
@@ -528,12 +549,48 @@ fun DashboardScreen(
                         }
                     }
                 }
+            } else if (displayedWorkouts.isEmpty()) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            val emptyMsg = when {
+                                searchQuery.isNotBlank() -> "No workouts match \"$searchQuery\""
+                                selectedTagFilter != null -> "No workouts match \"$selectedTagFilter\""
+                                selectedDurationBracket != WorkoutDurationBracket.ALL -> "No workouts match duration \"${selectedDurationBracket.displayName}\""
+                                else -> "No workouts match current filters"
+                            }
+                            Text(emptyMsg, fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.setTagFilter(null)
+                                    viewModel.setSearchQuery("")
+                                    viewModel.setDurationBracket(WorkoutDurationBracket.ALL)
+                                },
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Clear Filters", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
             } else {
-                items(cachedWorkouts, key = { it.filename }) { header ->
+                items(displayedWorkouts, key = { it.filename }) { header ->
                     WorkoutItemCard(
                         header = header,
+                        isFavorite = userProfile.favoriteWorkoutFilenames.any { it.equals(header.filename, ignoreCase = true) },
+                        completionCount = completionCountMap[header.filename.lowercase()] ?: 0,
                         onClick = { viewModel.selectWorkoutForPreview(header.filename) },
-                        onDelete = { workoutToDelete = header }
+                        onDelete = { workoutToDelete = header },
+                        onToggleFavorite = { viewModel.toggleFavoriteWorkout(header.filename) }
                     )
                 }
             }
@@ -949,8 +1006,292 @@ internal fun BeginnerPathCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun WorkoutItemCard(header: CachedWorkoutHeader, onClick: () -> Unit, onDelete: () -> Unit) {
+internal fun WorkoutLibraryHeader(
+    onNewWorkout: () -> Unit,
+    onImportWorkout: () -> Unit,
+    searchQuery: String = "",
+    onSearchQueryChange: (String) -> Unit = {},
+    selectedSortOption: WorkoutSortOption = WorkoutSortOption.RECENTLY_MODIFIED,
+    onSelectSortOption: (WorkoutSortOption) -> Unit = {},
+    selectedDurationBracket: WorkoutDurationBracket = WorkoutDurationBracket.ALL,
+    onSelectDurationBracket: (WorkoutDurationBracket) -> Unit = {},
+    showFilters: Boolean = true,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            "Workout Library",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+
+        if (showFilters) {
+            val focusManager = LocalFocusManager.current
+            val keyboardController = LocalSoftwareKeyboardController.current
+
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange,
+                placeholder = { Text("Search workouts, tags, authors…", fontSize = 13.sp) },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = {
+                            onSearchQueryChange("")
+                            focusManager.clearFocus()
+                            keyboardController?.hide()
+                        }) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Clear search",
+                                tint = Color.Gray,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = {
+                    focusManager.clearFocus()
+                    keyboardController?.hide()
+                }),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = onNewWorkout,
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    "New",
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            OutlinedButton(
+                onClick = onImportWorkout,
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    "Import .zwo",
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (showFilters) {
+                WorkoutSortMenu(
+                    selectedOption = selectedSortOption,
+                    onSelectOption = onSelectSortOption
+                )
+
+                WorkoutDurationMenu(
+                    selectedBracket = selectedDurationBracket,
+                    onSelectBracket = onSelectDurationBracket
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun WorkoutDurationMenu(
+    selectedBracket: WorkoutDurationBracket,
+    onSelectBracket: (WorkoutDurationBracket) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+        ) {
+            Icon(Icons.Default.Schedule, contentDescription = "Filter by duration", modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                if (selectedBracket == WorkoutDurationBracket.ALL) "Duration" else selectedBracket.displayName,
+                fontSize = 12.sp,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.width(2.dp))
+            Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            WorkoutDurationBracket.entries.forEach { bracket ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            bracket.displayName,
+                            fontWeight = if (bracket == selectedBracket) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = 13.sp
+                        )
+                    },
+                    onClick = {
+                        onSelectBracket(bracket)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun WorkoutSortMenu(
+    selectedOption: WorkoutSortOption,
+    onSelectOption: (WorkoutSortOption) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+        ) {
+            Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort workouts", modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                selectedOption.displayName,
+                fontSize = 12.sp,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.width(2.dp))
+            Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            WorkoutSortOption.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            option.displayName,
+                            fontWeight = if (option == selectedOption) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = 13.sp
+                        )
+                    },
+                    onClick = {
+                        onSelectOption(option)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun TagFilterRow(
+    tags: List<TagCount>,
+    selectedTag: String?,
+    totalWorkoutsCount: Int,
+    onSelectTag: (String?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            FilterChip(
+                selected = selectedTag == null || selectedTag.equals("All", ignoreCase = true),
+                onClick = { onSelectTag(null) },
+                label = { Text("All ($totalWorkoutsCount)", fontSize = 12.sp) },
+                shape = RoundedCornerShape(8.dp)
+            )
+        }
+        items(tags, key = { it.tag }) { tagCount ->
+            FilterChip(
+                selected = selectedTag.equals(tagCount.tag, ignoreCase = true),
+                onClick = {
+                    if (selectedTag.equals(tagCount.tag, ignoreCase = true)) {
+                        onSelectTag(null)
+                    } else {
+                        onSelectTag(tagCount.tag)
+                    }
+                },
+                label = { Text("${tagCount.tag} (${tagCount.count})", fontSize = 12.sp) },
+                shape = RoundedCornerShape(8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+internal fun WorkoutTagBadge(
+    tag: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .background(Color(0xFF1E293B), RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = tag,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color(0xFF38BDF8)
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun WorkoutItemCard(
+    header: CachedWorkoutHeader,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+    isFavorite: Boolean = false,
+    completionCount: Int = 0,
+    onToggleFavorite: () -> Unit = {}
+) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         shape = RoundedCornerShape(10.dp),
@@ -961,11 +1302,46 @@ internal fun WorkoutItemCard(header: CachedWorkoutHeader, onClick: () -> Unit, o
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(end = 10.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            IconButton(
+                onClick = onToggleFavorite
+            ) {
+                Icon(
+                    imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                    contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                    tint = if (isFavorite) Color(0xFFFFB300) else Color.Gray,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+
             Column(modifier = Modifier.weight(1f)) {
-                Text(header.name, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = header.name,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (completionCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF00331C), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = if (completionCount == 1) "✓ Completed" else "✓ ${completionCount}x",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF00E676)
+                            )
+                        }
+                    }
+                }
 
                 val minutes = header.durationSeconds / 60
                 val seconds = header.durationSeconds % 60
@@ -989,6 +1365,18 @@ internal fun WorkoutItemCard(header: CachedWorkoutHeader, onClick: () -> Unit, o
                     )
                     if (header.author.isNotBlank()) {
                         Text("By ${header.author}", fontSize = 12.sp, color = Color.Gray)
+                    }
+                }
+
+                if (header.tags.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(top = 6.dp)
+                    ) {
+                        header.tags.take(3).forEach { tag ->
+                            WorkoutTagBadge(tag = tag)
+                        }
                     }
                 }
             }

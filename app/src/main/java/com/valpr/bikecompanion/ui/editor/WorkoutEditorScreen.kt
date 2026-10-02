@@ -2,7 +2,10 @@ package com.valpr.bikecompanion.ui.editor
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +19,7 @@ import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -24,6 +28,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
@@ -37,12 +42,14 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -62,8 +69,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.valpr.bikecompanion.workout.WorkoutTextEvent
@@ -402,14 +411,137 @@ private fun WorkoutHeaderCard(
                 minLines = 2,
                 modifier = Modifier.fillMaxWidth()
             )
-            OutlinedTextField(
-                value = state.tagsText,
-                onValueChange = { state.updateHeader(tagsText = it) },
-                label = { Text("Tags (comma separated)") },
-                placeholder = { Text("HIIT, Intervals") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+            WorkoutTagEditorSection(
+                appliedTags = state.currentTags,
+                suggestedTags = state.availableTagSuggestions,
+                onAddTag = { state.addTag(it) },
+                onRemoveTag = { state.removeTag(it) }
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun WorkoutTagEditorSection(
+    appliedTags: List<String>,
+    suggestedTags: List<String>,
+    onAddTag: (String) -> Unit,
+    onRemoveTag: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var newTagInput by remember { mutableStateOf("") }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "Tags",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+
+        // 1. Applied tags as removable chips
+        if (appliedTags.isNotEmpty()) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                appliedTags.forEach { tag ->
+                    InputChip(
+                        selected = true,
+                        onClick = { onRemoveTag(tag) },
+                        label = { Text(tag, fontSize = 12.sp) },
+                        trailingIcon = {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Remove $tag",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+            }
+        }
+
+        // 2. Selectable suggestions (existing tags not yet applied)
+        val availableSuggestions = remember(appliedTags, suggestedTags) {
+            suggestedTags.filterNot { suggestion ->
+                appliedTags.any { it.equals(suggestion, ignoreCase = true) }
+            }
+        }
+
+        if (availableSuggestions.isNotEmpty()) {
+            Text(
+                text = "Select from existing tags:",
+                fontSize = 11.sp,
+                color = Color.Gray
+            )
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                availableSuggestions.forEach { suggestion ->
+                    SuggestionChip(
+                        onClick = { onAddTag(suggestion) },
+                        label = { Text("+ $suggestion", fontSize = 11.sp) },
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+            }
+        }
+
+        // 3. Deliberate new tag creation input + button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedTextField(
+                value = newTagInput,
+                onValueChange = { newTagInput = it },
+                label = { Text("New Tag", fontSize = 11.sp) },
+                placeholder = { Text("e.g. Gran Fondo", fontSize = 11.sp) },
+                singleLine = true,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("editorNewTagField"),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        val trimmed = newTagInput.trim()
+                        if (trimmed.isNotEmpty() && !appliedTags.any { it.equals(trimmed, ignoreCase = true) }) {
+                            onAddTag(trimmed)
+                            newTagInput = ""
+                        }
+                    }
+                )
+            )
+
+            val canAdd = newTagInput.trim().isNotEmpty() &&
+                !appliedTags.any { it.equals(newTagInput.trim(), ignoreCase = true) }
+
+            Button(
+                onClick = {
+                    val trimmed = newTagInput.trim()
+                    if (trimmed.isNotEmpty() && !appliedTags.any { it.equals(trimmed, ignoreCase = true) }) {
+                        onAddTag(trimmed)
+                        newTagInput = ""
+                    }
+                },
+                enabled = canAdd,
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.testTag("editorAddTagButton")
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Add Tag", fontSize = 12.sp)
+            }
         }
     }
 }
@@ -527,32 +659,33 @@ private fun SegmentCard(
                 EditableSegmentType.WARMUP,
                 EditableSegmentType.COOLDOWN,
                 EditableSegmentType.RAMP -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        IntStepperField(
-                            label = "Low (%FTP)",
-                            value = segment.powerLowPct,
-                            step = 5,
-                            min = 1,
-                            error = messageFor(
-                                WorkoutValidator.Field.POWER_LOW,
-                                WorkoutValidator.Field.POWER
-                            ),
-                            modifier = Modifier.weight(1f),
-                            onValueChange = { newValue -> onUpdate { seg -> seg.copy(powerLowPct = newValue) } }
-                        )
-                        IntStepperField(
-                            label = "High (%FTP)",
-                            value = segment.powerHighPct,
-                            step = 5,
-                            min = 1,
-                            error = messageFor(WorkoutValidator.Field.POWER_HIGH),
-                            modifier = Modifier.weight(1f),
-                            onValueChange = { newValue -> onUpdate { seg -> seg.copy(powerHighPct = newValue) } }
-                        )
-                    }
+                    ResponsiveFieldPair(
+                        field1 = { mod ->
+                            IntStepperField(
+                                label = "Low (%FTP)",
+                                value = segment.powerLowPct,
+                                step = 5,
+                                min = 1,
+                                error = messageFor(
+                                    WorkoutValidator.Field.POWER_LOW,
+                                    WorkoutValidator.Field.POWER
+                                ),
+                                modifier = mod,
+                                onValueChange = { newValue -> onUpdate { seg -> seg.copy(powerLowPct = newValue) } }
+                            )
+                        },
+                        field2 = { mod ->
+                            IntStepperField(
+                                label = "High (%FTP)",
+                                value = segment.powerHighPct,
+                                step = 5,
+                                min = 1,
+                                error = messageFor(WorkoutValidator.Field.POWER_HIGH),
+                                modifier = mod,
+                                onValueChange = { newValue -> onUpdate { seg -> seg.copy(powerHighPct = newValue) } }
+                            )
+                        }
+                    )
                 }
                 EditableSegmentType.FREE_RIDE,
                 EditableSegmentType.MAX_EFFORT -> {
@@ -572,79 +705,82 @@ private fun SegmentCard(
                         hint = "expands to ${segment.repeatCount.coerceAtLeast(1) * 2} on/off steps",
                         onValueChange = { newValue -> onUpdate { seg -> seg.copy(repeatCount = newValue) } }
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        IntStepperField(
-                            label = "On (sec)",
-                            value = segment.onDurationSeconds,
-                            step = 5,
-                            min = WorkoutValidator.MIN_DURATION_SECONDS,
-                            error = null,
-                            modifier = Modifier.weight(1f),
-                            onValueChange = { newValue -> onUpdate { seg -> seg.copy(onDurationSeconds = newValue) } }
-                        )
-                        IntStepperField(
-                            label = "On (%FTP)",
-                            value = segment.onPowerPct,
-                            step = 5,
-                            min = 1,
-                            error = null,
-                            modifier = Modifier.weight(1f),
-                            onValueChange = { newValue -> onUpdate { seg -> seg.copy(onPowerPct = newValue) } }
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        IntStepperField(
-                            label = "Off (sec)",
-                            value = segment.offDurationSeconds,
-                            step = 5,
-                            min = WorkoutValidator.MIN_DURATION_SECONDS,
-                            error = null,
-                            modifier = Modifier.weight(1f),
-                            onValueChange = { newValue -> onUpdate { seg -> seg.copy(offDurationSeconds = newValue) } }
-                        )
-                        IntStepperField(
-                            label = "Off (%FTP)",
-                            value = segment.offPowerPct,
-                            step = 5,
-                            min = 1,
-                            error = null,
-                            modifier = Modifier.weight(1f),
-                            onValueChange = { newValue -> onUpdate { seg -> seg.copy(offPowerPct = newValue) } }
-                        )
-                    }
+                    ResponsiveFieldPair(
+                        field1 = { mod ->
+                            IntStepperField(
+                                label = "On (sec)",
+                                value = segment.onDurationSeconds,
+                                step = 5,
+                                min = WorkoutValidator.MIN_DURATION_SECONDS,
+                                error = null,
+                                modifier = mod,
+                                onValueChange = { newValue -> onUpdate { seg -> seg.copy(onDurationSeconds = newValue) } }
+                            )
+                        },
+                        field2 = { mod ->
+                            IntStepperField(
+                                label = "On (%FTP)",
+                                value = segment.onPowerPct,
+                                step = 5,
+                                min = 1,
+                                error = null,
+                                modifier = mod,
+                                onValueChange = { newValue -> onUpdate { seg -> seg.copy(onPowerPct = newValue) } }
+                            )
+                        }
+                    )
+                    ResponsiveFieldPair(
+                        field1 = { mod ->
+                            IntStepperField(
+                                label = "Off (sec)",
+                                value = segment.offDurationSeconds,
+                                step = 5,
+                                min = WorkoutValidator.MIN_DURATION_SECONDS,
+                                error = null,
+                                modifier = mod,
+                                onValueChange = { newValue -> onUpdate { seg -> seg.copy(offDurationSeconds = newValue) } }
+                            )
+                        },
+                        field2 = { mod ->
+                            IntStepperField(
+                                label = "Off (%FTP)",
+                                value = segment.offPowerPct,
+                                step = 5,
+                                min = 1,
+                                error = null,
+                                modifier = mod,
+                                onValueChange = { newValue -> onUpdate { seg -> seg.copy(offPowerPct = newValue) } }
+                            )
+                        }
+                    )
                 }
             }
 
             if (segment.type == EditableSegmentType.INTERVALS) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    NullableIntStepperField(
-                        label = "Work RPM",
-                        value = segment.cadence,
-                        step = 1,
-                        min = WorkoutValidator.MIN_CADENCE_RPM,
-                        error = null,
-                        modifier = Modifier.weight(1f),
-                        onValueChange = { newValue -> onUpdate { seg -> seg.copy(cadence = newValue) } }
-                    )
-                    NullableIntStepperField(
-                        label = "Rest RPM",
-                        value = segment.restingCadence,
-                        step = 1,
-                        min = WorkoutValidator.MIN_CADENCE_RPM,
-                        error = null,
-                        modifier = Modifier.weight(1f),
-                        onValueChange = { newValue -> onUpdate { seg -> seg.copy(restingCadence = newValue) } }
-                    )
-                }
+                ResponsiveFieldPair(
+                    field1 = { mod ->
+                        NullableIntStepperField(
+                            label = "Work RPM",
+                            value = segment.cadence,
+                            step = 1,
+                            min = WorkoutValidator.MIN_CADENCE_RPM,
+                            error = null,
+                            modifier = mod,
+                            onValueChange = { newValue -> onUpdate { seg -> seg.copy(cadence = newValue) } }
+                        )
+                    },
+                    field2 = { mod ->
+                        NullableIntStepperField(
+                            label = "Rest RPM",
+                            value = segment.restingCadence,
+                            step = 1,
+                            min = WorkoutValidator.MIN_CADENCE_RPM,
+                            error = null,
+                            modifier = mod,
+                            onValueChange = { newValue -> onUpdate { seg -> seg.copy(restingCadence = newValue) } }
+                        )
+                    }
+                )
                 // Interval rows validate as expanded pairs: surface row issues
                 // here (field-level mapping is ambiguous across on/off steps).
                 issues.forEach { issue ->
@@ -799,6 +935,34 @@ private fun EditorFooter(
     }
 }
 
+@Composable
+private fun ResponsiveFieldPair(
+    field1: @Composable (Modifier) -> Unit,
+    field2: @Composable (Modifier) -> Unit,
+    modifier: Modifier = Modifier,
+    breakpoint: Dp = 420.dp
+) {
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        if (maxWidth >= breakpoint) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                field1(Modifier.weight(1f))
+                field2(Modifier.weight(1f))
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                field1(Modifier.fillMaxWidth())
+                field2(Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
 /**
  * Numeric field with −/+ steppers. Typed input passes through unclamped so
  * validation (not the text field) reports out-of-range values; the −
@@ -824,15 +988,19 @@ private fun IntStepperField(
                     val next = value - step
                     onValueChange(if (min != null) next.coerceAtLeast(min) else next)
                 },
-                contentPadding = PaddingValues(horizontal = 8.dp)
-            ) { Text("−") }
+                modifier = Modifier.size(width = 38.dp, height = 48.dp),
+                contentPadding = PaddingValues(0.dp),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("−", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
             OutlinedTextField(
                 value = text,
                 onValueChange = { input ->
                     text = input
                     input.toIntOrNull()?.let { onValueChange(it) }
                 },
-                label = { Text(label, fontSize = 11.sp) },
+                label = { Text(label, fontSize = 11.sp, maxLines = 1) },
                 isError = error != null || localInvalid,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
@@ -842,8 +1010,12 @@ private fun IntStepperField(
             )
             OutlinedButton(
                 onClick = { onValueChange(value + step) },
-                contentPadding = PaddingValues(horizontal = 8.dp)
-            ) { Text("+") }
+                modifier = Modifier.size(width = 38.dp, height = 48.dp),
+                contentPadding = PaddingValues(0.dp),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("+", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
         }
         val message = error ?: if (localInvalid) "Enter a whole number" else hint
         message?.let {
@@ -872,8 +1044,12 @@ private fun NullableIntStepperField(
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(
                 onClick = { onValueChange(((value ?: 85) - step).coerceAtLeast(min)) },
-                contentPadding = PaddingValues(horizontal = 8.dp)
-            ) { Text("−") }
+                modifier = Modifier.size(width = 38.dp, height = 48.dp),
+                contentPadding = PaddingValues(0.dp),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("−", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
             OutlinedTextField(
                 value = text,
                 onValueChange = { input ->
@@ -884,7 +1060,7 @@ private fun NullableIntStepperField(
                         input.toIntOrNull()?.let { onValueChange(it) }
                     }
                 },
-                label = { Text(label, fontSize = 11.sp) },
+                label = { Text(label, fontSize = 11.sp, maxLines = 1) },
                 isError = error != null || localInvalid,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
@@ -894,8 +1070,12 @@ private fun NullableIntStepperField(
             )
             OutlinedButton(
                 onClick = { onValueChange((value ?: 85) + step) },
-                contentPadding = PaddingValues(horizontal = 8.dp)
-            ) { Text("+") }
+                modifier = Modifier.size(width = 38.dp, height = 48.dp),
+                contentPadding = PaddingValues(0.dp),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("+", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
         }
         val message = error ?: if (localInvalid) "Enter a whole number" else null
         message?.let {

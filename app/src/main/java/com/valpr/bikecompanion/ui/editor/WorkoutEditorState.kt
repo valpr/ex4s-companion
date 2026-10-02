@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import com.valpr.bikecompanion.workout.Workout
 import com.valpr.bikecompanion.workout.WorkoutRepository
 import com.valpr.bikecompanion.workout.WorkoutSegment
+import com.valpr.bikecompanion.workout.WorkoutTags
 import com.valpr.bikecompanion.workout.WorkoutTextEvent
 import com.valpr.bikecompanion.workout.WorkoutValidator
 import com.valpr.bikecompanion.workout.ZwoParser
@@ -505,6 +506,63 @@ class WorkoutEditorState(val repository: WorkoutRepository) {
         description?.let { this.description = it }
         tagsText?.let { this.tagsText = it }
         isDirty = true
+    }
+
+    /** Currently applied tags, parsed from [tagsText]. */
+    val currentTags: List<String>
+        get() = tagsText.split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+    /**
+     * Adds [tag] to this workout if not already present (case-insensitive).
+     * If [tag] contains commas, tokens are split, trimmed, and added individually.
+     * Normalizes against [canonicalTags] if a case-insensitive match exists.
+     * Sets [isDirty] to true. Returns true if at least one tag was added.
+     */
+    fun addTag(tag: String, canonicalTags: List<String> = WorkoutTags.CANONICAL): Boolean {
+        val tokens = tag.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        if (tokens.isEmpty()) return false
+        val existing = currentTags.toMutableList()
+        var anyAdded = false
+        for (token in tokens) {
+            if (existing.none { it.equals(token, ignoreCase = true) }) {
+                val resolvedTag = canonicalTags.find { it.equals(token, ignoreCase = true) } ?: token
+                existing.add(resolvedTag)
+                anyAdded = true
+            }
+        }
+        if (anyAdded) {
+            tagsText = existing.joinToString(", ")
+            isDirty = true
+        }
+        return anyAdded
+    }
+
+    /**
+     * Removes [tag] from this workout (case-insensitive).
+     * Sets [isDirty] to true. Returns true if the tag was removed.
+     */
+    fun removeTag(tag: String): Boolean {
+        val trimmed = tag.trim()
+        val existing = currentTags
+        val filtered = existing.filterNot { it.equals(trimmed, ignoreCase = true) }
+        if (filtered.size == existing.size) return false
+        tagsText = filtered.joinToString(", ")
+        isDirty = true
+        return true
+    }
+
+    /**
+     * Observable tag suggestions gathered off-thread from canonical tags
+     * and cached workouts. Defaults to canonical tags immediately so the UI
+     * never blocks on disk I/O.
+     */
+    var availableTagSuggestions: List<String> by mutableStateOf(WorkoutTags.CANONICAL)
+        internal set
+
+    fun setAvailableTagSuggestions(suggestions: List<String>) {
+        availableTagSuggestions = suggestions
     }
 
     fun updateSegment(index: Int, transform: (EditableSegment) -> EditableSegment) {

@@ -187,4 +187,37 @@ class WorkoutEditorUiTest {
         assertEquals(240, state.segments[0].durationSeconds)
         assertFalse(state.isDirty)
     }
+
+    @Test
+    fun rampSegment_displaysLowAndHighPowerFields() {
+        val state = WorkoutEditorState(repository)
+        state.loadNew()
+        state.changeSegmentType(0, com.valpr.bikecompanion.ui.editor.EditableSegmentType.RAMP)
+
+        composeRule.setContent {
+            WorkoutEditorScreen(state = state, onSaved = {}, onNavigateBack = {})
+        }
+
+        composeRule.onNodeWithText("Low (%FTP)").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("High (%FTP)").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun intervalsSegment_displaysOnAndOffFields() {
+        val state = WorkoutEditorState(repository)
+        state.loadNew()
+        state.changeSegmentType(0, com.valpr.bikecompanion.ui.editor.EditableSegmentType.INTERVALS)
+
+        composeRule.setContent {
+            WorkoutEditorScreen(state = state, onSaved = {}, onNavigateBack = {})
+        }
+
+        composeRule.onNodeWithText("Repeats").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("On (sec)").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("On (%FTP)").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Off (sec)").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Off (%FTP)").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Work RPM").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Rest RPM").performScrollTo().assertIsDisplayed()
+    }
 }

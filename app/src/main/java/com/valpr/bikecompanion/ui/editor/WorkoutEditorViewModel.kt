@@ -2,7 +2,12 @@ package com.valpr.bikecompanion.ui.editor
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import com.valpr.bikecompanion.BikeApplication
+import com.valpr.bikecompanion.workout.WorkoutFilterSortHelper
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * Hosts the editor draft across configuration changes (rotation on a
@@ -10,7 +15,10 @@ import com.valpr.bikecompanion.BikeApplication
  * itself stays a plain testable class; this ViewModel is only its
  * rotation-proof owner, following the Dashboard/AthleteStats pattern.
  */
-class WorkoutEditorViewModel(application: Application) : AndroidViewModel(application) {
+class WorkoutEditorViewModel(
+    application: Application,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+) : AndroidViewModel(application) {
 
     private val app = application as BikeApplication
 
@@ -19,6 +27,22 @@ class WorkoutEditorViewModel(application: Application) : AndroidViewModel(applic
     var openFilename: String? = null
         private set
     private var opened = false
+
+    init {
+        refreshTagSuggestions()
+    }
+
+    fun refreshTagSuggestions() {
+        viewModelScope.launch(ioDispatcher) {
+            val workouts = try {
+                app.workoutRepository.getCachedWorkouts()
+            } catch (_: Exception) {
+                emptyList()
+            }
+            val suggestions = WorkoutFilterSortHelper.extractUniqueTags(workouts)
+            editorState.setAvailableTagSuggestions(suggestions)
+        }
+    }
 
     fun hasUnsavedChanges(): Boolean = editorState.isDirty
 
