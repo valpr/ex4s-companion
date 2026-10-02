@@ -165,6 +165,20 @@ class ErgControllerTest {
     }
 
     @Test
+    fun freeRide_toErgSegment_resumesActiveAndDispatches() {
+        controller.update(targetWatts = 150, actualWatts = 150, rawCadence = 80.0)
+        val free = controller.update(targetWatts = null, actualWatts = 150, rawCadence = 80.0)
+        assertEquals(ErgState.FREE_RIDE, free.state)
+
+        // Rider under target on re-entry: fresh integral (reset in FREE_RIDE),
+        // new target (lastTarget was nulled), so PI trim dispatches.
+        val back = controller.update(targetWatts = 150, actualWatts = 100, rawCadence = 80.0)
+        assertEquals(ErgState.ACTIVE, back.state)
+        assertEquals(150, back.effectiveTargetWatts)
+        assertTrue(back.shouldSendBleCommand)
+    }
+
+    @Test
     fun manualBailout_setsBailoutResistanceUntilResumed() {
         controller.update(targetWatts = 200, actualWatts = 200, rawCadence = 85.0)
 

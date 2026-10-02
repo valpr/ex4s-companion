@@ -24,6 +24,10 @@ concurrentFutures = "1.2.0"
 wear = "1.3.0"
 wearOngoing = "1.1.0"
 spotless = "7.0.2"
+# Single source of truth for phone + wear release versions (AGENTS.md §5).
+# Bump both together at tag/release time; :app and :wear read these.
+appVersionCode = "2"
+appVersionName = "1.0.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }

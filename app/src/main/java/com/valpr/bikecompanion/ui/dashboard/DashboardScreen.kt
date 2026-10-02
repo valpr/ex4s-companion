@@ -96,7 +96,8 @@ fun DashboardScreen(
     modifier: Modifier = Modifier,
     onResumeWorkout: () -> Unit = onStartWorkout,
     onNavigateToSettings: () -> Unit = onNavigateToAthleteStats,
-    onNavigateToHistory: () -> Unit = {}
+    onNavigateToHistory: () -> Unit = {},
+    onEditWorkout: (String?) -> Unit = {}
 ) {
     val bleState by viewModel.bleManager.connectionState.collectAsState()
     val telemetry by viewModel.bleManager.telemetry.collectAsState()
@@ -341,6 +342,20 @@ fun DashboardScreen(
                     )
                 }
 
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        val filename = selectedPreviewFilename
+                        viewModel.clearWorkoutPreview()
+                        onEditWorkout(filename)
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Edit workout", fontSize = 14.sp)
+                }
+
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
@@ -464,6 +479,15 @@ fun DashboardScreen(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
+
+                    OutlinedButton(
+                        onClick = { onEditWorkout(null) },
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("New", fontSize = 12.sp)
+                    }
 
                     OutlinedButton(
                         onClick = {

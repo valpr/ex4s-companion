@@ -181,6 +181,116 @@ class WorkoutUiSemanticsTest {
     }
 
     @Test
+    fun structured_freeRideSegment_showsShifters_hidesIntensityAndClutch() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        val workout = Workout(
+            name = "Mixed",
+            segments = listOf(
+                WorkoutSegment.SteadyState(durationSeconds = 5, power = 0.5f),
+                WorkoutSegment.FreeRide(durationSeconds = 120),
+                WorkoutSegment.SteadyState(durationSeconds = 5, power = 0.5f)
+            )
+        )
+        manager.startWorkout(workout)
+        // Tick into the FreeRide segment (elapsed 6).
+        managerTime(6100L)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {})
+        }
+
+        composeRule.onNodeWithText("ELECTRONIC RESISTANCE SHIFTER").performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("-1 Res").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("+1 Res").assertIsDisplayed()
+        composeRule.onNodeWithText("THE CLUTCH (BAILOUT)").assertDoesNotExist()
+        composeRule.onNodeWithText("-5%").assertDoesNotExist()
+        composeRule.onNodeWithText("+5%").assertDoesNotExist()
+    }
+
+    @Test
+    fun structured_freeRideSegment_plusOneRes_dispatchesIncrement() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        val workout = Workout(
+            name = "Mixed",
+            segments = listOf(
+                WorkoutSegment.SteadyState(durationSeconds = 5, power = 0.5f),
+                WorkoutSegment.FreeRide(durationSeconds = 120),
+                WorkoutSegment.SteadyState(durationSeconds = 5, power = 0.5f)
+            )
+        )
+        manager.startWorkout(workout)
+        managerTime(6100L)
+        // Steady ticks dispatch ERG commands; isolate the manual click below.
+        dispatchedResistance.clear()
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {})
+        }
+
+        composeRule.onNodeWithText("+1 Res").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        org.junit.Assert.assertEquals(listOf(11), dispatchedResistance)
+    }
+
+    @Test
+    fun structured_maxEffortSegment_showsShifters_hidesIntensityAndClutch() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        val workout = Workout(
+            name = "Mixed",
+            segments = listOf(
+                WorkoutSegment.SteadyState(durationSeconds = 5, power = 0.5f),
+                WorkoutSegment.MaxEffort(durationSeconds = 120),
+                WorkoutSegment.SteadyState(durationSeconds = 5, power = 0.5f)
+            )
+        )
+        manager.startWorkout(workout)
+        // Tick into the MaxEffort segment (elapsed 6).
+        managerTime(6100L)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {})
+        }
+
+        composeRule.onNodeWithText("ELECTRONIC RESISTANCE SHIFTER").performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("-1 Res").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("+1 Res").assertIsDisplayed()
+        composeRule.onNodeWithText("THE CLUTCH (BAILOUT)").assertDoesNotExist()
+        composeRule.onNodeWithText("-5%").assertDoesNotExist()
+        composeRule.onNodeWithText("+5%").assertDoesNotExist()
+    }
+
+    @Test
+    fun structured_ergSegment_afterFreeRide_restoresIntensityAndClutch() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        val workout = Workout(
+            name = "Mixed",
+            segments = listOf(
+                WorkoutSegment.FreeRide(durationSeconds = 5),
+                WorkoutSegment.SteadyState(durationSeconds = 600, power = 0.5f)
+            )
+        )
+        manager.startWorkout(workout)
+        // Tick past the opening FreeRide into the ERG segment (elapsed 6).
+        managerTime(6100L)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {})
+        }
+
+        composeRule.onNodeWithText("THE CLUTCH (BAILOUT)").performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("-5%").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("+5%").assertIsDisplayed()
+        composeRule.onNodeWithText("ELECTRONIC RESISTANCE SHIFTER").assertDoesNotExist()
+    }
+
+    @Test
     fun watchHrStale_marksHrTileAndStatusRow() {
         val manager = createManager()
         managerScope.testScheduler.advanceUntilIdle()

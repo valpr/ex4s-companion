@@ -2,6 +2,9 @@ package com.valpr.bikecompanion.ui.navigation
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -31,7 +34,8 @@ enum class AppScreen {
     WORKOUT_SUMMARY,
     ATHLETE_STATS,
     RIDE_HISTORY,
-    RIDE_DETAIL
+    RIDE_DETAIL,
+    WORKOUT_EDITOR
 }
 
 @Composable
@@ -42,6 +46,55 @@ fun MainNavigation(onRequestPermissions: () -> Unit, modifier: Modifier = Modifi
     val sessionState by sessionManager.sessionState.collectAsState()
 
     var currentScreen by rememberSaveable { mutableStateOf(AppScreen.DASHBOARD) }
+    var editorFilename by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // Editor draft owner hoisted so dashboard-initiated navigation can guard
+    // against silently dropping unsaved edits (same instance the editor
+    // screen observes; Activity-scoped like DashboardViewModel).
+    val editorVm: com.valpr.bikecompanion.ui.editor.WorkoutEditorViewModel = viewModel()
+    var pendingEditorFilename by rememberSaveable { mutableStateOf<String?>(null) }
+    var showEditorSwitchDialog by rememberSaveable { mutableStateOf(false) }
+
+    fun navigateToEditor(filename: String?) {
+        if (editorVm.hasUnsavedChanges() && filename != editorVm.openFilename) {
+            pendingEditorFilename = filename
+            showEditorSwitchDialog = true
+        } else {
+            editorFilename = filename
+            currentScreen = AppScreen.WORKOUT_EDITOR
+        }
+    }
+
+    if (showEditorSwitchDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showEditorSwitchDialog = false
+                pendingEditorFilename = null
+            },
+            title = { Text("Discard unsaved edits?") },
+            text = { Text("You have unsaved changes. Discard them and open the selected workout?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val target = pendingEditorFilename
+                        showEditorSwitchDialog = false
+                        pendingEditorFilename = null
+                        editorVm.discardAndOpen(target)
+                        editorFilename = target
+                        currentScreen = AppScreen.WORKOUT_EDITOR
+                    }
+                ) { Text("Discard") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showEditorSwitchDialog = false
+                        pendingEditorFilename = null
+                    }
+                ) { Text("Keep editing") }
+            }
+        )
+    }
 
     // If session transitions to COMPLETED, navigate to summary
     if (sessionState.status == SessionStatus.COMPLETED && currentScreen != AppScreen.WORKOUT_SUMMARY) {
@@ -63,6 +116,35 @@ fun MainNavigation(onRequestPermissions: () -> Unit, modifier: Modifier = Modifi
                 },
                 onNavigateToAthleteStats = { currentScreen = AppScreen.ATHLETE_STATS },
                 onNavigateToHistory = { currentScreen = AppScreen.RIDE_HISTORY },
+                onEditWorkout = { filename -> navigateToEditor(filename) },
+                modifier = modifier
+            )
+        }
+
+        AppScreen.WORKOUT_EDITOR -> {
+            // Clean drafts pop via this handler; dirty drafts are intercepted
+            // by the editor screen's own BackHandler (discard dialog).
+            BackHandler(enabled = !editorVm.editorState.isDirty) {
+                currentScreen = AppScreen.DASHBOARD
+            }
+            val dashboardVm: DashboardViewModel = viewModel()
+            LaunchedEffect(editorFilename) {
+                if (!editorVm.open(editorFilename)) {
+                    // Guarded paths should prevent this; bounce back to the
+                    // open draft and offer discard-and-switch instead of
+                    // silently dropping edits.
+                    pendingEditorFilename = editorFilename
+                    editorFilename = editorVm.openFilename
+                    showEditorSwitchDialog = true
+                }
+            }
+            com.valpr.bikecompanion.ui.editor.WorkoutEditorScreen(
+                state = editorVm.editorState,
+                onSaved = {
+                    dashboardVm.loadWorkouts()
+                    currentScreen = AppScreen.DASHBOARD
+                },
+                onNavigateBack = { currentScreen = AppScreen.DASHBOARD },
                 modifier = modifier
             )
         }

@@ -90,7 +90,7 @@ This document contains mandatory guidelines, invariants, and hard-learned lesson
 * **Application ID & Version Parity Across Companion Modules (Play Services Wearable Data Layer):**
   * The phone app (`:app`) and Wear OS app (`:wear`) **must share the exact same `applicationId`** across all build types (e.g. `com.valpr.bikecompanion`).
   * **Never** configure `applicationIdSuffix` (e.g. `.debug`) in `:app` without an identical configuration in `:wear`. Google Play Services Wearable Data Layer (`MessageClient`, `CapabilityClient`, `DataClient`) isolates cross-device routing strictly by package name / `applicationId`. Any discrepancy results in silent message drops and completely broken capability resolution across the phone and watch.
-  * Keep `versionCode` and base `versionName` synchronized between `:app` and `:wear` so multi-APK releases, companion pairing, and Play Store dependency matching never reject or desync companion builds.
+  * Keep `versionCode` and base `versionName` synchronized between `:app` and `:wear` so multi-APK releases, companion pairing, and Play Store dependency matching never reject or desync companion builds. Single source of truth is `gradle/libs.versions.toml` (`appVersionCode` / `appVersionName`); both modules read it — bump once at tag/release time, never per-module.
   * **Capability vs. Topology Separation:** Raw Bluetooth topology (`NodeClient.connectedNodes`) only indicates OS-level Bluetooth pairing. Never treat a connected node as companion-ready without verifying app capability advertisement (`CAPABILITY_WEAR_APP` / `CAPABILITY_PHONE_APP`) or active ping handshake.
 
 ---
@@ -141,7 +141,7 @@ This document contains mandatory guidelines, invariants, and hard-learned lesson
   * Same rule for any new background worker: no hardcoded dispatchers, no static Android log calls on hot paths.
 * **Extract pure helpers for UI-adjacent logic so it stays plain-JUnit:**
   * Established pattern: `shared/MacValidator`, `shared/RotaryBailoutAccumulator`, `ui/summary/HrChartScaling`, `DashboardViewModel.resolveImportFilename`, `WearMessageListenerService.shouldWakeForMessage`. Chart scaling, gesture accumulators, filename sanitizers, and wake filters must live in framework-free functions/objects — never inlined in `@Composable` lambdas or Activities where they become untestable.
-  * Keep MockK surface minimal (Gatt object only; prefer real constructors or Objenesis-safe mocks for characteristics/descriptors). Do not mix Robolectric runners with MockK tests; prefer plain JUnit + injected fakes to keep the suite fast (112 tests run in seconds, not minutes).
+  * Keep MockK surface minimal (Gatt object only; prefer real constructors or Objenesis-safe mocks for characteristics/descriptors). Do not mix Robolectric runners with MockK tests; prefer plain JUnit + injected fakes to keep the suite fast (342 tests run in seconds, not minutes).
 * **Fail loudly on misconfiguration; capture dispatches as lists:**
   * Engine guards (e.g., missing FTP for structured workouts) must return `Result.failure`, never silently fall back to phantom targets (200W) — UI-only gates are bypassable by service/watch callers.
   * Tests that assert BLE dispatches must record into a `MutableList<Int>` (not a single `lastSent` slot) so duplicate/unwanted writes are detectable.
@@ -182,3 +182,21 @@ This document contains mandatory guidelines, invariants, and hard-learned lesson
   ```
   Keep the full `test --rerun-tasks` gate above as the phase-completion check — never narrow it to green a phase.
 * Robolectric is pinned to 4.17 (not 4.13): 4.13's bundled ASM cannot read Java 25 class files (this machine's JBR is 25.x) and crashes every test teardown in `RoboCookieManager` reset. Do not downgrade without re-verifying on this JDK.
+
+---
+
+## 10. Workout Editor & ZWO Round-Trip Invariants
+* **Dirty drafts own navigation; navigation never silently drops edits:**
+  * ViewModel-owned drafts survive screen changes, so `open()` must refuse a *different* file while dirty (return `Boolean`) and the navigation layer must confirm (discard/save) before `forceOpen`/`discardAndOpen`.
+  * Discard-confirm must actually revert state (`discardChanges()`) before navigating — navigating alone leaves the dirty draft in the ViewModel and re-entry resurfaces rejected edits.
+  * Hoist the shared editor ViewModel above `when (currentScreen)` so dashboard-initiated navigation can check `hasUnsavedChanges()`. Outer `BackHandler` must be `enabled = !isDirty` so the editor screen's discard dialog owns back while dirty.
+* **Aggregation must be lossless — collapse only cue-consistent repeats:**
+  * `collapseIntervalRows` may only merge repeats whose segment *and* cue lists are all identical (longest cue-consistent prefix). Distinct per-repeat messages stay as single rows; collapsing them deletes cues on save.
+* **Writer/parser symmetry — never de-flatten block structure:**
+  * Interval rows serialize as a single `<IntervalsT>` (work cues at on-offset, rest cues at `onDuration + offset`, mirroring the parser's per-repeat replication), never as N flattened `SteadyState` pairs.
+  * Clamping in `buildDetailed` (validator trim counting) and in the writer must agree exactly, or trim warnings and written output disagree.
+* **Validation owns range reporting — fields must not pre-clamp typed input:**
+  * Stepper *buttons* may clamp at `min` as a convenience, but typed text input passes through raw so validator errors stay reachable. Pre-clamping makes lower-bound errors dead code that only tests can produce.
+  * Same principle for representation switches (`changeSegmentType`): carry `restCues` (merge into work cues when the target has no rest slot) rather than dropping user data.
+* **Dialog flags tied to ViewModel state must be `rememberSaveable`:**
+  * When the condition being confirmed (e.g. `pendingOverwriteFilename`) lives in the rotation-proof ViewModel but visibility is local `remember`, rotation strands the state with no dialog. Persist visibility or derive it from the ViewModel state.

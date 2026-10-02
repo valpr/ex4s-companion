@@ -110,11 +110,11 @@ class WorkoutRepositoryTest {
 
         repository.importSampleWorkoutsIfEmpty()
         val seeded = repository.getCachedWorkouts()
-        assertEquals(6, seeded.size)
+        assertEquals(16, seeded.size)
 
         // Running a second time should not duplicate files
         repository.importSampleWorkoutsIfEmpty()
-        assertEquals(6, repository.getCachedWorkouts().size)
+        assertEquals(16, repository.getCachedWorkouts().size)
     }
 
     @Test
@@ -127,7 +127,7 @@ class WorkoutRepositoryTest {
         repository.importSampleWorkoutsIfEmpty()
 
         val names = repository.getCachedWorkouts().map { it.filename }
-        assertEquals(6, names.size)
+        assertEquals(16, names.size)
         assertTrue(names.contains("beginner_01_first_pedals.zwo"))
         assertTrue(names.contains("beginner_02_building_rhythm.zwo"))
         assertTrue(names.contains("beginner_03_steady_confidence.zwo"))

@@ -59,6 +59,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.valpr.bikecompanion.engine.ErgState
@@ -117,6 +118,26 @@ fun ActiveWorkoutScreen(
     }
 }
 
+/**
+ * True when the rider must control resistance manually: full Free Ride
+ * (`workout == null`) or a `FreeRide`/`MaxEffort` segment inside a structured
+ * workout (ERG disabled). Intensity chips are a no-op in these states, so the
+ * UI swaps them for `-1/+1 Res` + the electronic shifter (AGENTS.md §2).
+ *
+ * Framework-free on [WorkoutSessionState] so it stays testable from plain
+ * JUnit via [WorkoutSessionState] construction plus Robolectric semantics.
+ */
+internal fun isManualResistanceControl(state: WorkoutSessionState): Boolean {
+    if (state.workout == null) return true
+    state.currentPosition?.let { return !it.segment.isErgEnabled }
+    // Pre-tick fallback: playhead hasn't emitted a position yet.
+    state.workout.getSegmentAtTime(state.elapsedSeconds)?.let { return !it.segment.isErgEnabled }
+    // Past the end (finished) with no ERG decision: nothing to scale, so show
+    // manual controls rather than dead intensity chips (subagent review m5).
+    if (state.status == SessionStatus.COMPLETED) return true
+    return state.ergDecision?.state == ErgState.FREE_RIDE
+}
+
 @Composable
 private fun PortraitWorkoutContent(
     state: WorkoutSessionState,
@@ -124,6 +145,7 @@ private fun PortraitWorkoutContent(
     onFinish: () -> Unit,
     watchState: WearableWatchState = WearableWatchState()
 ) {
+    val manualControl = isManualResistanceControl(state)
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -144,7 +166,7 @@ private fun PortraitWorkoutContent(
         TheBigThree(state = state, watchState = watchState)
 
         if (state.workout != null) {
-            // Target vs Actual Gauge
+            // Target vs Actual Gauge (auto-hides when target is null, e.g. FreeRide segment)
             TargetVsActualBar(state = state)
 
             // The Canvas Profile (for structured workouts)
@@ -155,8 +177,18 @@ private fun PortraitWorkoutContent(
                 height = 130.dp
             )
 
-            // The Clutch (Manual ERG Bailout Button)
-            ClutchButton(state = state, onToggleClutch = { sessionManager.toggleClutch() })
+            if (manualControl) {
+                // FreeRide / MaxEffort segment inside a structured workout:
+                // ERG is off so intensity chips are a no-op — expose the
+                // manual electronic shifter here (AGENTS.md §2).
+                FreeRideResistancePanel(
+                    currentResistance = state.latestTelemetry.resistanceLevel,
+                    onResistanceChange = { sessionManager.setManualResistance(it) }
+                )
+            } else {
+                // The Clutch (Manual ERG Bailout Button)
+                ClutchButton(state = state, onToggleClutch = { sessionManager.toggleClutch() })
+            }
         } else {
             // Free Ride: Electronic Resistance Shifter & Live Stats Panel
             FreeRideResistancePanel(
@@ -181,6 +213,7 @@ private fun LandscapeWorkoutContent(
     onFinish: () -> Unit,
     watchState: WearableWatchState = WearableWatchState()
 ) {
+    val manualControl = isManualResistanceControl(state)
     Row(
         modifier = Modifier
             .fillMaxSize()
@@ -197,7 +230,7 @@ private fun LandscapeWorkoutContent(
             WorkoutHeaderBar(state = state)
             WatchHrStatusRow(watchState = watchState)
             TheBigThree(state = state, watchState = watchState)
-            if (state.workout != null) {
+            if (state.workout != null && !manualControl) {
                 ClutchButton(state = state, onToggleClutch = { sessionManager.toggleClutch() })
             } else {
                 FreeRideStatsRow(
@@ -224,6 +257,14 @@ private fun LandscapeWorkoutContent(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     height = 110.dp
                 )
+                if (manualControl) {
+                    FreeRideResistancePanel(
+                        currentResistance = state.latestTelemetry.resistanceLevel,
+                        onResistanceChange = { sessionManager.setManualResistance(it) },
+                        modifier = Modifier.weight(1f),
+                        enableInnerScroll = true
+                    )
+                }
             } else {
                 FreeRideResistancePanel(
                     currentResistance = state.latestTelemetry.resistanceLevel,
@@ -249,12 +290,14 @@ private fun WorkoutHeaderBar(state: WorkoutSessionState) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column {
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
             Text(
                 state.workout?.name ?: "Free Ride",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             val segmentInfo = state.currentPosition?.let {
                 "Step ${it.segmentIndex + 1}/${it.totalSegments} • ${it.segmentRemainingSeconds}s remaining"
@@ -262,17 +305,22 @@ private fun WorkoutHeaderBar(state: WorkoutSessionState) {
             Text(
                 segmentInfo,
                 fontSize = 12.sp,
-                color = Color(0xFFAAAAAA)
+                color = Color(0xFFAAAAAA),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
 
-        // Time Counter
+        // Time Counter — single line so a long workout title squeezes with
+        // ellipsis instead of crushing the timer into vertical wrap.
         Text(
             state.formattedElapsedTime,
             fontSize = 26.sp,
             fontWeight = FontWeight.Black,
             fontFamily = FontFamily.Monospace,
-            color = Color(0xFF00E676)
+            color = Color(0xFF00E676),
+            maxLines = 1,
+            softWrap = false
         )
     }
 }
@@ -589,12 +637,13 @@ private fun WorkoutControlsBar(
     sessionManager: WorkoutSessionManager,
     onFinish: () -> Unit
 ) {
+    val manualControl = isManualResistanceControl(state)
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (state.workout != null) {
+        if (!manualControl && state.workout != null) {
             // Structured workout: Intensity scaling chips
             OutlinedButton(
                 onClick = { sessionManager.adjustIntensity(-0.05f) },

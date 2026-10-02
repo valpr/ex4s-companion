@@ -11,8 +11,11 @@ android {
         applicationId = "com.valpr.bikecompanion"
         minSdk = 30
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode =
+            libs.versions.appVersionCode
+                .get()
+                .toInt()
+        versionName = libs.versions.appVersionName.get()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
