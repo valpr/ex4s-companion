@@ -11,6 +11,7 @@ import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.os.Build
 import android.util.Log
@@ -34,11 +35,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.File
 
 class EchelonBleManager(private val context: Context, private val bluetoothAdapter: BluetoothAdapter?) {
     companion object {
         private const val TAG = "EchelonBleManager"
         private const val POLL_INTERVAL_MS = 2000L
+        const val PACKET_LOG_DIR = "packetlogs"
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -55,6 +58,7 @@ class EchelonBleManager(private val context: Context, private val bluetoothAdapt
     private var userRequestedDisconnect: Boolean = false
     private var pollCounter: Int = 1
     private var lastTargetResistance: Int = -1
+    private var consecutiveZeroCadenceFrames: Int = 0
 
     private val _connectionState = MutableStateFlow<BleConnectionState>(BleConnectionState.Disconnected)
     val connectionState: StateFlow<BleConnectionState> = _connectionState.asStateFlow()
@@ -73,8 +77,33 @@ class EchelonBleManager(private val context: Context, private val bluetoothAdapt
         _lastError.value = null
     }
 
+    /**
+     * Phone adapter power state. Updated by [BluetoothStateReceiver],
+     * [refreshBluetoothState], and [startScan] so the UI banner reacts even
+     * if a broadcast is missed. True only when an adapter exists and is on.
+     */
+    private val _isBluetoothEnabled = MutableStateFlow(bluetoothAdapter?.isEnabled == true)
+    val isBluetoothEnabled: StateFlow<Boolean> = _isBluetoothEnabled.asStateFlow()
+
+    /** False on hardware without a Bluetooth adapter (emulators) — enable prompt can't work. */
+    val hasBluetoothAdapter: Boolean
+        get() = bluetoothAdapter != null
+
+    private var bluetoothStateReceiver: BroadcastReceiver? = null
+
     private val _packetLog = MutableSharedFlow<PacketLogEntry>(extraBufferCapacity = 100)
     val packetLog: SharedFlow<PacketLogEntry> = _packetLog.asSharedFlow()
+
+    /**
+     * File-backed packet evidence for post-ride dropout forensics.
+     * Best-effort: all I/O failures are swallowed so logging never breaks a ride.
+     */
+    val packetLogRecorder = PacketLogRecorder(
+        logDirectory = File(context.filesDir, PACKET_LOG_DIR),
+        scope = scope,
+        packetSource = packetLog,
+        stateSource = connectionState
+    )
 
     private val commandQueue = BleCommandQueue(
         scope = scope,
@@ -86,7 +115,70 @@ class EchelonBleManager(private val context: Context, private val bluetoothAdapt
 
     init {
         commandQueue.start()
+        packetLogRecorder.start()
+        startBluetoothMonitoring()
     }
+
+    // region Bluetooth adapter monitoring
+
+    private fun startBluetoothMonitoring() {
+        if (bluetoothStateReceiver != null) return
+        try {
+            val receiver = BluetoothStateReceiver { enabled -> onBluetoothEnabledChanged(enabled) }
+            val filter = BluetoothStateReceiver.intentFilter()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("DEPRECATION")
+                context.registerReceiver(receiver, filter)
+            }
+            bluetoothStateReceiver = receiver
+        } catch (e: Exception) {
+            Log.w(TAG, "Bluetooth state monitoring unavailable: ${e.message}")
+        }
+        refreshBluetoothState()
+    }
+
+    private fun stopBluetoothMonitoring() {
+        val receiver = bluetoothStateReceiver ?: return
+        bluetoothStateReceiver = null
+        try {
+            context.unregisterReceiver(receiver)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to unregister Bluetooth receiver: ${e.message}")
+        }
+    }
+
+    /**
+     * Re-reads the adapter (e.g. from Activity.onResume) in case a broadcast
+     * was missed while the process was backgrounded.
+     */
+    fun refreshBluetoothState() {
+        onBluetoothEnabledChanged(bluetoothAdapter?.isEnabled == true)
+    }
+
+    private fun onBluetoothEnabledChanged(enabled: Boolean) {
+        val wasEnabled = _isBluetoothEnabled.value
+        _isBluetoothEnabled.value = enabled
+        if (!enabled) {
+            // Adapter power kills any in-flight scan; the scanner is dead so
+            // drop the callback (stopScan can't reach the scanner while off).
+            scanCallback = null
+            if (!BluetoothStateResolver.isBluetoothDisabledError(_connectionState.value)) {
+                _lastError.value = BluetoothStateResolver.DISABLED_MESSAGE
+                _connectionState.value =
+                    BleConnectionState.Error(BluetoothStateResolver.DISABLED_MESSAGE)
+            }
+        } else if (!wasEnabled && BluetoothStateResolver.isBluetoothDisabledError(_connectionState.value)) {
+            _connectionState.value = BleConnectionState.Disconnected
+            _lastError.value = null
+            if (autoConnect && !userRequestedDisconnect) {
+                startScan()
+            }
+        }
+    }
+
+    // endregion
 
     // region Scanning
 
@@ -96,9 +188,12 @@ class EchelonBleManager(private val context: Context, private val bluetoothAdapt
         stopScan()
 
         if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
-            _connectionState.value = BleConnectionState.Error("Bluetooth is disabled. Please turn on Bluetooth.")
+            _isBluetoothEnabled.value = false
+            _lastError.value = BluetoothStateResolver.DISABLED_MESSAGE
+            _connectionState.value = BleConnectionState.Error(BluetoothStateResolver.DISABLED_MESSAGE)
             return
         }
+        _isBluetoothEnabled.value = true
 
         val scanner = bluetoothAdapter.bluetoothLeScanner
         if (scanner == null) {
@@ -194,9 +289,16 @@ class EchelonBleManager(private val context: Context, private val bluetoothAdapt
 
     @SuppressLint("MissingPermission")
     fun stopScan() {
-        if (scanCallback != null && bluetoothAdapter?.isEnabled == true) {
-            bluetoothAdapter.bluetoothLeScanner?.stopScan(scanCallback)
-            scanCallback = null
+        // Always drop our reference: when the adapter is off the scanner is
+        // dead and stopScan() can't be reached, so holding the callback leaks.
+        val callback = scanCallback
+        scanCallback = null
+        if (callback != null && bluetoothAdapter?.isEnabled == true) {
+            try {
+                bluetoothAdapter.bluetoothLeScanner?.stopScan(callback)
+            } catch (e: Exception) {
+                Log.w(TAG, "Exception stopping BLE scan: ${e.message}")
+            }
             if (_connectionState.value is BleConnectionState.Scanning) {
                 _connectionState.value = BleConnectionState.Disconnected
             }
@@ -452,12 +554,33 @@ class EchelonBleManager(private val context: Context, private val bluetoothAdapt
         val parsed = EchelonPacketParser.parse(data)
         when (parsed) {
             is ParsedPacket.CadenceFrame -> {
+                consecutiveZeroCadenceFrames = CadenceZeroFilter.nextZeroStreak(
+                    consecutiveZeroCadenceFrames,
+                    parsed.cadenceRpm
+                )
+                // A lone 0-RPM frame is far more likely a dropout/micro-pause
+                // than a genuine stop: hold last good cadence/watts so one bad
+                // frame can't zero the display, trip bailout, or bake a 0
+                // into history. Sustained zeros still register as a stop.
+                val holdLast = parsed.cadenceRpm <= 0 &&
+                    !CadenceZeroFilter.shouldAcceptZero(consecutiveZeroCadenceFrames)
                 logPacket(
                     PacketDirection.RX,
                     "0xD1 Cadence",
                     data,
-                    "Cadence: ${parsed.cadenceRpm} RPM, Dist: %.2f km".format(parsed.distanceKm)
+                    "Cadence: ${parsed.cadenceRpm} RPM, Dist: %.2f km".format(parsed.distanceKm) +
+                        if (holdLast) " (held last good)" else ""
                 )
+                if (holdLast) {
+                    _telemetry.update { current ->
+                        current.copy(
+                            elapsedSeconds = parsed.elapsedSeconds,
+                            distanceKm = parsed.distanceKm,
+                            lastUpdateTimestampMs = System.currentTimeMillis()
+                        )
+                    }
+                    return
+                }
                 _telemetry.update { current ->
                     val watts = EchelonWattTable.calculateWattsInt(
                         resistance = current.resistanceLevel,
@@ -564,6 +687,8 @@ class EchelonBleManager(private val context: Context, private val bluetoothAdapt
     // endregion
 
     fun onDestroy() {
+        stopBluetoothMonitoring()
+        packetLogRecorder.stop()
         stopKeepAlivePoll()
         commandQueue.stop()
         disconnectInternal(cleanState = true)

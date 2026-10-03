@@ -48,7 +48,9 @@ data class ErgDecision(
  * 2. PI trim correction clamped to [-3, +3] resistance steps.
  * 3. Integral anti-windup clamping.
  * 4. 5W deadband guard: suppresses BLE writes when output power is within 5W of target.
- * 5. Anti-Spiral cadence floor (<60 RPM) with instant drop to recovery resistance (8).
+ * 5. Anti-Spiral cadence floor (<60 RPM) with drop to recovery resistance (8) after
+ *    [belowFloorRequiredSeconds] consecutive sub-floor ticks — a single dropout
+ *    sample rides a grace tick of normal ERG instead of slamming the bike.
  * 6. Recovery gate requiring >= 75 RPM sustained for 3 consecutive seconds to re-engage.
  */
 class ErgController(
@@ -60,13 +62,37 @@ class ErgController(
     var deadbandWatts: Int = 5,
     var recoveryResistance: Int = 8,
     var emaAlpha: Double = 0.5, // 3-second EMA: 2 / (3 + 1) = 0.5
-    var hrCappingScale: Double = 0.90 // 10% reduction when HR is critical
+    var hrCappingScale: Double = 0.90, // 10% reduction when HR is critical
+    var belowFloorRequiredSeconds: Int = 2 // consecutive sub-floor ticks before bailout entry
 ) {
     companion object {
         const val MAX_TRIM = 3
         const val MIN_RESISTANCE = EchelonWattTable.MIN_RESISTANCE
         const val MAX_RESISTANCE = EchelonWattTable.MAX_RESISTANCE
         const val MAX_INTEGRAL_WINDUP = 300.0 // Clamps integral contribution to ~300 * ki
+
+        /**
+         * Dip margin below the workout's prescribed cadence before the
+         * bailout floor can trip.
+         */
+        const val TARGET_CADENCE_FLOOR_MARGIN_RPM = 15.0
+
+        /**
+         * Target-aware bailout floor: the lower of the athlete's configured
+         * floor and 15 RPM below the prescribed cadence. Low-cadence
+         * prescriptions (e.g. 70 RPM climbs) get dip margin instead of
+         * tripping on the global floor; high-cadence work keeps the
+         * configured floor. Null prescription (Free Ride, custom segments
+         * without cadence) keeps the configured floor.
+         *
+         * Pure policy (no Android types) so it stays plain-JUnit; the session
+         * loop applies it per tick since prescriptions change per segment.
+         */
+        fun effectiveFloor(configuredFloorRpm: Double, targetCadenceRpm: Int?): Double = if (targetCadenceRpm == null) {
+            configuredFloorRpm
+        } else {
+            minOf(configuredFloorRpm, targetCadenceRpm - TARGET_CADENCE_FLOOR_MARGIN_RPM)
+        }
     }
 
     var state: ErgState = ErgState.INACTIVE
@@ -83,6 +109,7 @@ class ErgController(
     private var lastTargetWatts: Int? = null
     private var integralError: Double = 0.0
     private var consecutiveRecoverySeconds: Int = 0
+    private var consecutiveBelowFloorSeconds: Int = 0
 
     /**
      * Resets internal controller state (cadence EMA, integral error, and recovery counters).
@@ -92,6 +119,7 @@ class ErgController(
         smoothedCadence = 0.0
         integralError = 0.0
         consecutiveRecoverySeconds = 0
+        consecutiveBelowFloorSeconds = 0
         lastTargetWatts = null
         lastCommandedResistance = recoveryResistance
         isCriticalHrActive = false
@@ -104,6 +132,7 @@ class ErgController(
         state = ErgState.MANUAL_BAILOUT
         integralError = 0.0
         consecutiveRecoverySeconds = 0
+        consecutiveBelowFloorSeconds = 0
         lastTargetWatts = null
         lastCommandedResistance = bailoutResistance
         return ErgDecision(
@@ -127,6 +156,7 @@ class ErgController(
         state = ErgState.ACTIVE
         integralError = 0.0
         consecutiveRecoverySeconds = 0
+        consecutiveBelowFloorSeconds = 0
         lastTargetWatts = null
         lastCommandedResistance = -1
     }
@@ -164,6 +194,7 @@ class ErgController(
             state = ErgState.FREE_RIDE
             integralError = 0.0
             consecutiveRecoverySeconds = 0
+            consecutiveBelowFloorSeconds = 0
             lastTargetWatts = null
             return ErgDecision(
                 state = state,
@@ -200,29 +231,43 @@ class ErgController(
             )
         }
 
-        // Case 3: Anti-Spiral check: If raw cadence OR smoothed cadence drops below floor threshold
+        // Case 3: Anti-Spiral check with entry debounce. A single sub-floor
+        // sample (BLE dropout, pedal micro-pause) must not slam the bike to
+        // recovery: entry requires `belowFloorRequiredSeconds` consecutive
+        // sub-floor ticks — symmetric with the recovery gate (Case 4). Grace
+        // ticks fall through to normal ERG below, which is spiral-safe here:
+        // feedforward at collapsed cadence yields MIN_RESISTANCE and PI trim
+        // is clamped to ±3.
         val isCadenceBelowFloor = (rawCadence < cadenceFloorRpm || smoothedCadence < cadenceFloorRpm)
-        if (state != ErgState.CADENCE_FLOOR_BAILOUT && isCadenceBelowFloor) {
-            state = ErgState.CADENCE_FLOOR_BAILOUT
-            integralError = 0.0
-            consecutiveRecoverySeconds = 0
-            lastTargetWatts = null
-            // AGENTS.md §1: emergency bailout must bypass de-duplication caching and
-            // always dispatch so the bike actuates even if cache already reads recovery.
-            lastCommandedResistance = recoveryResistance
+        if (state != ErgState.CADENCE_FLOOR_BAILOUT) {
+            if (!isCadenceBelowFloor) {
+                consecutiveBelowFloorSeconds = 0
+            } else {
+                consecutiveBelowFloorSeconds++
+                if (consecutiveBelowFloorSeconds >= belowFloorRequiredSeconds) {
+                    consecutiveBelowFloorSeconds = 0
+                    state = ErgState.CADENCE_FLOOR_BAILOUT
+                    integralError = 0.0
+                    consecutiveRecoverySeconds = 0
+                    lastTargetWatts = null
+                    // AGENTS.md §1: emergency bailout must bypass de-duplication caching and
+                    // always dispatch so the bike actuates even if cache already reads recovery.
+                    lastCommandedResistance = recoveryResistance
 
-            return ErgDecision(
-                state = state,
-                targetResistance = recoveryResistance,
-                shouldSendBleCommand = true,
-                smoothedCadence = smoothedCadence,
-                nominalResistance = recoveryResistance,
-                trimOffset = 0,
-                powerErrorWatts = effectiveTargetWatts - actualWatts,
-                consecutiveRecoverySeconds = 0,
-                effectiveTargetWatts = effectiveTargetWatts,
-                isHrCapped = isCriticalHr
-            )
+                    return ErgDecision(
+                        state = state,
+                        targetResistance = recoveryResistance,
+                        shouldSendBleCommand = true,
+                        smoothedCadence = smoothedCadence,
+                        nominalResistance = recoveryResistance,
+                        trimOffset = 0,
+                        powerErrorWatts = effectiveTargetWatts - actualWatts,
+                        consecutiveRecoverySeconds = 0,
+                        effectiveTargetWatts = effectiveTargetWatts,
+                        isHrCapped = isCriticalHr
+                    )
+                }
+            }
         }
 
         // Case 4: In Cadence Floor Bailout -> verify recovery gate

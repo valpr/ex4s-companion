@@ -145,15 +145,69 @@ class EngineRetunePropagationTest {
         managerTime(1100L)
         assertEquals(ErgState.ACTIVE, ergController.state)
 
-        // Retune floor to 80 mid-ride: 70 RPM now collapses -> instant recovery drop.
+        // Retune floor to 80 mid-ride: 70 RPM now collapses -> recovery drop
+        // after the two-tick entry debounce fills.
         dispatchedResistance.clear()
         profileFlow.value = baseProfile.copy(cadenceFloorRpm = 80)
         managerScope.testScheduler.runCurrent()
+        managerTime(1100L)
         managerTime(1100L)
         assertEquals(ErgState.CADENCE_FLOOR_BAILOUT, ergController.state)
         assertTrue(
             "Retuned floor must actuate the bike immediately",
             dispatchedResistance.contains(8)
         )
+    }
+
+    @Test
+    fun targetAwareFloor_givesLowCadenceTargetDipMargin() = runTest {
+        val manager = createManager()
+        settleManager()
+        manager.startWorkout(
+            Workout(
+                name = "Climb",
+                segments = listOf(
+                    WorkoutSegment.SteadyState(durationSeconds = 600, power = 0.82f, targetCadence = 70)
+                )
+            )
+        )
+
+        // Riding 2 RPM under the global floor but above the effective floor
+        // (70 − 15 = 55): no bailout across sustained ticks.
+        telemetryFlow.value = BikeTelemetry(cadenceRpm = 58, estimatedWatts = 170, resistanceLevel = 14)
+        managerScope.testScheduler.runCurrent()
+        managerTime(1100L)
+        managerTime(1100L)
+        managerTime(1100L)
+        assertEquals(55.0, ergController.cadenceFloorRpm, 1e-9)
+        assertEquals(ErgState.ACTIVE, ergController.state)
+
+        // Genuine collapse below the effective floor still bails out.
+        telemetryFlow.value = BikeTelemetry(cadenceRpm = 50, estimatedWatts = 100, resistanceLevel = 14)
+        managerTime(1100L)
+        managerTime(1100L)
+        assertEquals(ErgState.CADENCE_FLOOR_BAILOUT, ergController.state)
+        assertTrue(dispatchedResistance.contains(8))
+    }
+
+    @Test
+    fun targetAwareFloor_highCadenceTargetKeepsConfiguredFloor() = runTest {
+        val manager = createManager()
+        settleManager()
+        manager.startWorkout(
+            Workout(
+                name = "Sprint",
+                segments = listOf(
+                    WorkoutSegment.SteadyState(durationSeconds = 600, power = 1.0f, targetCadence = 95)
+                )
+            )
+        )
+
+        telemetryFlow.value = BikeTelemetry(cadenceRpm = 85, estimatedWatts = 200, resistanceLevel = 14)
+        managerScope.testScheduler.runCurrent()
+        managerTime(1100L)
+        // min(60, 95 − 15) = configured floor.
+        assertEquals(60.0, ergController.cadenceFloorRpm, 1e-9)
+        assertEquals(ErgState.ACTIVE, ergController.state)
     }
 }

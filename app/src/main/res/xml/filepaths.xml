@@ -2,4 +2,6 @@
 <paths>
     <!-- TCX activity exports staged for ACTION_SEND sharing (cacheDir/tcx/). -->
     <cache-path name="tcx" path="tcx/" />
+    <!-- BLE packet logs staged for ACTION_SEND sharing (cacheDir/packetlogs/). -->
+    <cache-path name="packetlogs" path="packetlogs/" />
 </paths>

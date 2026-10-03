@@ -88,11 +88,57 @@ class ErgControllerTest {
     }
 
     @Test
-    fun update_cadenceBelowFloor_immediatelyBailsOutToLevelEight() {
+    fun effectiveFloor_prefersLowerOfConfiguredAndTargetMinusMargin() {
+        // No prescription (Free Ride, custom segments): configured floor stands.
+        assertEquals(60.0, ErgController.effectiveFloor(60.0, null), 1e-9)
+        // High-cadence work: min(60, 90 − 15) = configured floor.
+        assertEquals(60.0, ErgController.effectiveFloor(60.0, 90), 1e-9)
+        // Boundary: min(60, 75 − 15) = configured floor.
+        assertEquals(60.0, ErgController.effectiveFloor(60.0, 75), 1e-9)
+        // Low-cadence climbs: min(60, 70 − 15) = 55 dip margin.
+        assertEquals(55.0, ErgController.effectiveFloor(60.0, 70), 1e-9)
+        // Retuned floor composes: min(50, 70 − 15) = user floor wins.
+        assertEquals(50.0, ErgController.effectiveFloor(50.0, 70), 1e-9)
+    }
+
+    @Test
+    fun update_singleSubFloorTick_doesNotBailOut() {
         // Initialize at normal 85 RPM
         controller.update(targetWatts = 200, actualWatts = 200, rawCadence = 85.0)
 
-        // Cadence collapses to 50 RPM (below 60 RPM floor)
+        // One dropout-style sample at 50 RPM: grace tick, normal ERG continues.
+        val graceDecision = controller.update(
+            targetWatts = 200,
+            actualWatts = 100,
+            rawCadence = 50.0
+        )
+
+        assertEquals(ErgState.ACTIVE, graceDecision.state)
+        assertEquals(ErgState.ACTIVE, controller.state)
+    }
+
+    @Test
+    fun update_isolatedDipResetsEntryCounter() {
+        controller.update(targetWatts = 200, actualWatts = 200, rawCadence = 85.0)
+
+        // Dip below floor for one tick, recover, dip again: never two in a row.
+        controller.update(targetWatts = 200, actualWatts = 100, rawCadence = 50.0)
+        controller.update(targetWatts = 200, actualWatts = 200, rawCadence = 85.0)
+        val secondDip = controller.update(targetWatts = 200, actualWatts = 100, rawCadence = 50.0)
+
+        assertEquals(ErgState.ACTIVE, secondDip.state)
+    }
+
+    @Test
+    fun update_cadenceBelowFloor_bailsOutAfterTwoConsecutiveTicks() {
+        // Initialize at normal 85 RPM
+        controller.update(targetWatts = 200, actualWatts = 200, rawCadence = 85.0)
+
+        // First sub-floor tick: grace, still ACTIVE.
+        controller.update(targetWatts = 200, actualWatts = 100, rawCadence = 50.0)
+        assertEquals(ErgState.ACTIVE, controller.state)
+
+        // Second consecutive sub-floor tick: bail out to level 8.
         val bailoutDecision = controller.update(
             targetWatts = 200,
             actualWatts = 100,
@@ -106,9 +152,11 @@ class ErgControllerTest {
 
     @Test
     fun update_cadenceFloorEntry_alwaysDispatchesEvenIfCacheReadsRecovery() {
-        // After reset the cache already reads recoveryResistance (8). A fresh
-        // cadence collapse must still dispatch (AGENTS.md §1 emergency bypass).
+        // After reset the cache already reads recoveryResistance (8). A
+        // sustained cadence collapse must still dispatch (AGENTS.md §1
+        // emergency bypass) — after the entry debounce fills.
         controller.reset()
+        controller.update(targetWatts = 200, actualWatts = 100, rawCadence = 50.0)
         val bailoutDecision = controller.update(
             targetWatts = 200,
             actualWatts = 100,
@@ -122,7 +170,8 @@ class ErgControllerTest {
 
     @Test
     fun update_recoveryGate_requiresThreeConsecutiveSecondsAboveThreshold() {
-        // 1. Trigger bailout
+        // 1. Trigger bailout (two consecutive sub-floor ticks)
+        controller.update(targetWatts = 200, actualWatts = 200, rawCadence = 50.0)
         controller.update(targetWatts = 200, actualWatts = 200, rawCadence = 50.0)
         assertEquals(ErgState.CADENCE_FLOOR_BAILOUT, controller.state)
 

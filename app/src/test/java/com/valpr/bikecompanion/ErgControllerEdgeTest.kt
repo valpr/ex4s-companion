@@ -11,7 +11,8 @@ class ErgControllerEdgeTest {
     @Test
     fun reset_clearsIntegratorAndState() {
         val c = ErgController()
-        // Drive into bailout then reset
+        // Drive into bailout (two consecutive sub-floor ticks) then reset
+        c.update(200, 100, 30.0, 1.0, false)
         c.update(200, 100, 30.0, 1.0, false)
         assertEquals(ErgState.CADENCE_FLOOR_BAILOUT, c.state)
         c.reset()
@@ -24,7 +25,8 @@ class ErgControllerEdgeTest {
     @Test
     fun recoveryBoundary_requiresSustainedThreshold() {
         val c = ErgController()
-        c.update(200, 100, 30.0, 1.0, false) // enter bailout
+        c.update(200, 100, 30.0, 1.0, false) // sub-floor tick 1 (grace)
+        c.update(200, 100, 30.0, 1.0, false) // sub-floor tick 2: enter bailout
         // 74.9 below 75 threshold -> stays
         var d = c.update(200, 100, 74.9, 1.0, false)
         assertEquals(ErgState.CADENCE_FLOOR_BAILOUT, d.state)

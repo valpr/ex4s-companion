@@ -51,6 +51,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Re-read the adapter in case a state-change broadcast was missed
+        // while backgrounded, so the Bluetooth-off banner is immediate.
+        bikeApp.bleManager.refreshBluetoothState()
         if (hasScanPermissions()) {
             startAutoScan()
         }

@@ -22,7 +22,7 @@ object EngineTuningHelp {
 
     const val CADENCE_FLOOR_TITLE = "Cadence Floor"
     const val CADENCE_FLOOR_TOOLTIP =
-        "Cadence Floor: Anti-spiral safety threshold. If cadence drops below this RPM, ERG mode immediately suspends and drops resistance to level 8 to prevent pedal lockup ('spiral of death')."
+        "Cadence Floor: Anti-spiral safety threshold. If cadence stays below this RPM for 2 consecutive seconds, ERG mode suspends and drops resistance to level 8 to prevent pedal lockup ('spiral of death'). Brief dips are ignored."
     const val CADENCE_FLOOR_CONTENT_DESC = "Cadence Floor info"
 
     const val RECOVERY_THRESHOLD_TITLE = "Recovery Threshold"

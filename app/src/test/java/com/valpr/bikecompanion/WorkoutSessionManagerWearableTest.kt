@@ -201,8 +201,10 @@ class WorkoutSessionManagerWearableTest {
         manager.startWorkout(workout)
 
         manager.hapticAlerts.test {
-            // Collapse cadence below floor (60): next 1s tick must bail out + buzz once.
+            // Collapse cadence below floor (60): the second consecutive 1s
+            // tick bails out + buzzes once (first tick is a grace tick).
             telemetryFlow.value = BikeTelemetry(cadenceRpm = 30, estimatedWatts = 60, resistanceLevel = 14)
+            managerTime(1100L)
             managerTime(1100L)
             assertEquals(ErgState.CADENCE_FLOOR_BAILOUT, ergController.state)
             assertEquals(HapticAlertType.BAILOUT_TRIGGERED, awaitItem())
