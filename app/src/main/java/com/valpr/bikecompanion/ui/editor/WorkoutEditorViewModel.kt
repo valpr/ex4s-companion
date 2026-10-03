@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
  * itself stays a plain testable class; this ViewModel is only its
  * rotation-proof owner, following the Dashboard/AthleteStats pattern.
  */
-class WorkoutEditorViewModel(
+class WorkoutEditorViewModel @JvmOverloads constructor(
     application: Application,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : AndroidViewModel(application) {
