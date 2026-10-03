@@ -118,6 +118,30 @@ class WorkoutUiSemanticsTest {
     }
 
     @Test
+    fun structured_intensityScaling_plusFivePercent_displays105Percent() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(structuredWorkout())
+        managerTime(1100L)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {})
+        }
+
+        composeRule.onNodeWithText("100%").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("+5%").performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("105%").assertIsDisplayed()
+        composeRule.onNodeWithText("104%").assertDoesNotExist()
+
+        composeRule.onNodeWithText("-5%").performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("100%").assertIsDisplayed()
+    }
+
+    @Test
     fun freeRide_showsShifters_hidesIntensityAndClutch() {
         val manager = createManager()
         managerScope.testScheduler.advanceUntilIdle()

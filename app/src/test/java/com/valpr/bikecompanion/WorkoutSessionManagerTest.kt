@@ -270,6 +270,25 @@ class WorkoutSessionManagerTest {
     }
 
     @Test
+    fun adjustIntensity_incrementalFivePercent_doesNotDriftOrLosePrecision() = runTest {
+        val manager = createManager()
+        settleManager()
+        manager.startWorkout(null)
+        assertEquals(1.0f, manager.sessionState.value.intensityScale, 0.001f)
+
+        // Increment by +5%
+        manager.adjustIntensity(0.05f)
+        assertEquals(1.05f, manager.sessionState.value.intensityScale, 0.0001f)
+
+        // Repeated increments and decrements must not drift due to IEEE 754 float accumulation
+        repeat(10) { manager.adjustIntensity(0.05f) }
+        assertEquals(1.50f, manager.sessionState.value.intensityScale, 0.0001f)
+
+        repeat(10) { manager.adjustIntensity(-0.05f) }
+        assertEquals(1.00f, manager.sessionState.value.intensityScale, 0.0001f)
+    }
+
+    @Test
     fun toggleClutch_cyclesErgBailout() = runTest {
         val manager = createManager()
         settleManager()

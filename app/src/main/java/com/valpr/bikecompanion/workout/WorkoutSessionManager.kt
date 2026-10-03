@@ -361,7 +361,8 @@ class WorkoutSessionManager(
     }
 
     fun adjustIntensity(delta: Float) {
-        val newScale = (_sessionState.value.intensityScale + delta).coerceIn(0.50f, 1.50f)
+        val rawPercent = ((_sessionState.value.intensityScale + delta) * 100).roundToInt()
+        val newScale = (rawPercent / 100f).coerceIn(0.50f, 1.50f)
         _sessionState.update { it.copy(intensityScale = newScale) }
     }
 

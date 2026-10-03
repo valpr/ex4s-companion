@@ -688,7 +688,7 @@ private fun WorkoutControlsBar(
                 Text("-5%", fontSize = 12.sp, maxLines = 1)
             }
 
-            val scalePercent = (state.intensityScale * 100).toInt()
+            val scalePercent = (state.intensityScale * 100).roundToInt()
             Text(
                 "$scalePercent%",
                 fontSize = 12.sp,
