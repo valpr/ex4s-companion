@@ -159,10 +159,12 @@ This document contains mandatory guidelines, invariants, and hard-learned lesson
    $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat lintDebug
    ```
    *(Ensure 0 errors across `:app`, `:shared`, `:wear`; all expected suppressions live in `lint.xml`).*
-3. **Rerun all tests cleanly:**
+3. **Rerun all tests cleanly (split gate — both commands; together they are the full gate):**
    ```powershell
-   $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat test --rerun-tasks
+   $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat test --rerun-tasks -Probolectric=exclude
+   $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat :app:testDebugUnitTest --rerun-tasks -Probolectric=only
    ```
+   *(Robolectric UI classes share heavy android-all sandboxes and starve each other under shared forks — full-suite-only `AppNotIdle` timeouts while every class passes alone. The two commands together cover every test; either half alone is not the gate. New `@RunWith(RobolectricTestRunner)` classes must be added to `robolectricSpecs` in `app/build.gradle.kts`.)*
 4. **Assemble the debug APK:**
    ```powershell
    $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat assembleDebug
@@ -180,7 +182,7 @@ This document contains mandatory guidelines, invariants, and hard-learned lesson
   ```powershell
   $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat :app:testDebugUnitTest --tests "com.valpr.bikecompanion.MyTest"
   ```
-  Keep the full `test --rerun-tasks` gate above as the phase-completion check — never narrow it to green a phase.
+  Keep both halves of the split gate above as the phase-completion check — never narrow it to green a phase (either half alone is not the gate).
 * Robolectric is pinned to 4.17 (not 4.13): 4.13's bundled ASM cannot read Java 25 class files (this machine's JBR is 25.x) and crashes every test teardown in `RoboCookieManager` reset. Do not downgrade without re-verifying on this JDK.
 
 ---

@@ -4,6 +4,25 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Every @RunWith(RobolectricTestRunner) class. The suite is split
+// (AGENTS.md §9): `-Probolectric=only` runs just these, `-Probolectric=exclude`
+// runs everything else, default runs all. Keep this complete when adding
+// Robolectric tests — an omitted class silently lands in the wrong half.
+val robolectricSpecs =
+    listOf(
+        "com/valpr/bikecompanion/AthleteStatsUiTest.class",
+        "com/valpr/bikecompanion/BeginnerPathCardTest.class",
+        "com/valpr/bikecompanion/ViewModelInstantiationTest.class",
+        "com/valpr/bikecompanion/WorkoutEditorUiTest.class",
+        "com/valpr/bikecompanion/WorkoutLibraryHeaderTest.class",
+        "com/valpr/bikecompanion/WorkoutLibrarySortFilterUiTest.class",
+        "com/valpr/bikecompanion/WorkoutTagEditorUiTest.class",
+        "com/valpr/bikecompanion/WorkoutUiSemanticsTest.class"
+    )
+
+// Evaluated once so unit-test task configuration stays trivially readable.
+val robolectricMode = providers.gradleProperty("robolectric").getOrElse("all")
+
 android {
     namespace = "com.valpr.bikecompanion"
     compileSdk = 37
@@ -34,6 +53,13 @@ android {
         unitTests.all {
             it.maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(2)
             it.maxHeapSize = "2g"
+            // Robolectric classes share heavy android-all sandboxes and starve
+            // each other under shared forks (AppNotIdle timeouts in full runs
+            // while every class passes alone), so the gate runs them apart.
+            when (robolectricMode) {
+                "only" -> it.include(robolectricSpecs)
+                "exclude" -> it.exclude(robolectricSpecs)
+            }
         }
     }
 
