@@ -2,12 +2,15 @@ package com.valpr.bikecompanion
 
 import android.app.Application
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ApplicationProvider
 import com.valpr.bikecompanion.ui.athletestats.AthleteStatsViewModel
 import com.valpr.bikecompanion.ui.dashboard.DashboardViewModel
 import com.valpr.bikecompanion.ui.editor.WorkoutEditorViewModel
 import com.valpr.bikecompanion.ui.history.RideHistoryViewModel
+import org.junit.After
 import org.junit.Assert.assertNotNull
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -24,6 +27,22 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ViewModelInstantiationTest {
+
+    private lateinit var store: ViewModelStore
+
+    @Before
+    fun setUp() {
+        store = ViewModelStore()
+    }
+
+    @After
+    fun tearDown() {
+        // Cancel every viewModelScope: the real ViewModels own infinite
+        // collectors (profile/state flows) that would otherwise leak into
+        // whatever test class shares this forked JVM next and starve its
+        // main looper.
+        store.clear()
+    }
 
     @Test
     fun allAndroidViewModelsExposeApplicationConstructor() {
@@ -44,17 +63,18 @@ class ViewModelInstantiationTest {
     fun defaultAndroidViewModelFactoryInstantiatesAllViewModels() {
         val app = ApplicationProvider.getApplicationContext<BikeApplication>()
         val factory = ViewModelProvider.AndroidViewModelFactory.getInstance(app)
+        val provider = ViewModelProvider(store, factory)
 
-        val dashboardVm = factory.create(DashboardViewModel::class.java)
+        val dashboardVm = provider.get(DashboardViewModel::class.java)
         assertNotNull(dashboardVm)
 
-        val editorVm = factory.create(WorkoutEditorViewModel::class.java)
+        val editorVm = provider.get(WorkoutEditorViewModel::class.java)
         assertNotNull(editorVm)
 
-        val athleteStatsVm = factory.create(AthleteStatsViewModel::class.java)
+        val athleteStatsVm = provider.get(AthleteStatsViewModel::class.java)
         assertNotNull(athleteStatsVm)
 
-        val historyVm = factory.create(RideHistoryViewModel::class.java)
+        val historyVm = provider.get(RideHistoryViewModel::class.java)
         assertNotNull(historyVm)
     }
 }
