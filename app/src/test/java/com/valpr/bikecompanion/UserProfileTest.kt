@@ -28,6 +28,7 @@ class UserProfileTest {
         assertEquals(UnitSystem.METRIC, defaultProfile.unitSystem)
         assertEquals(0.0f, defaultProfile.wattsPerKg, 0.001f)
         assertFalse(defaultProfile.useKarvonenZones)
+        assertTrue(defaultProfile.autoEnterPip)
         assertFalse("Unconfigured FTP must return false", defaultProfile.isFtpConfigured)
     }
 

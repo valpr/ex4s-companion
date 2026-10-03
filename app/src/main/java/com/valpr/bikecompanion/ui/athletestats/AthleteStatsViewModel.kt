@@ -227,6 +227,12 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    fun updateAutoEnterPip(enabled: Boolean) {
+        viewModelScope.launch {
+            userProfileRepo().updateAutoEnterPip(enabled)
+        }
+    }
+
     fun setHealthSyncEnabled(enabled: Boolean) {
         viewModelScope.launch {
             val result = app.setHealthSyncEnabledForActive(enabled)

@@ -1,22 +1,36 @@
 package com.valpr.bikecompanion
 
 import android.Manifest
+import android.app.PictureInPictureParams
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.util.Rational
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import com.valpr.bikecompanion.data.BleConnectionState
 import com.valpr.bikecompanion.ui.theme.BikeCompanionTheme
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class MainActivity : ComponentActivity() {
 
     private val bikeApp: BikeApplication
         get() = application as BikeApplication
+
+    private val _isInPipMode = MutableStateFlow(false)
+    val isInPipMode: StateFlow<Boolean> = _isInPipMode.asStateFlow()
+
+    private var autoEnterPipAllowed: Boolean = false
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -38,12 +52,20 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            _isInPipMode.value = isInPictureInPictureMode
+        }
+
         checkAndRequestPermissions()
 
         setContent {
+            val inPip by isInPipMode.collectAsState()
             BikeCompanionTheme {
                 com.valpr.bikecompanion.ui.navigation.MainNavigation(
-                    onRequestPermissions = { checkAndRequestPermissions() }
+                    onRequestPermissions = { checkAndRequestPermissions() },
+                    isInPipMode = inPip,
+                    onEnterPip = { enterPipMode() },
+                    onAutoEnterPipChanged = { updatePipParams(it) }
                 )
             }
         }
@@ -118,5 +140,58 @@ class MainActivity : ComponentActivity() {
         if (permissionsToRequest.isNotEmpty()) {
             permissionLauncher.launch(permissionsToRequest.toTypedArray())
         }
+    }
+
+    private fun updatePipParams(shouldAutoEnter: Boolean) {
+        autoEnterPipAllowed = shouldAutoEnter
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                setPictureInPictureParams(buildPipParams(autoEnter = shouldAutoEnter))
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun enterPipMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                enterPictureInPictureMode(buildPipParams(autoEnter = false))
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT in Build.VERSION_CODES.O until Build.VERSION_CODES.S) {
+            if (!isInPictureInPictureMode && autoEnterPipAllowed) {
+                try {
+                    enterPictureInPictureMode(buildPipParams(autoEnter = true))
+                } catch (_: Exception) {
+                }
+            }
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        _isInPipMode.value = isInPictureInPictureMode
+        if (!isInPictureInPictureMode && autoEnterPipAllowed) {
+            updatePipParams(true)
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun buildPipParams(autoEnter: Boolean): PictureInPictureParams {
+        val builder = PictureInPictureParams.Builder()
+            .setAspectRatio(Rational(16, 9))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setAutoEnterEnabled(autoEnter)
+            builder.setSeamlessResizeEnabled(true)
+        }
+        return builder.build()
     }
 }

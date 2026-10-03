@@ -56,7 +56,8 @@ data class UserProfile(
     val useKarvonenZones: Boolean = false,
     val favoriteWorkoutFilenames: Set<String> = emptySet(),
     val lastUpdatedEpochMs: Long = 0L,
-    val healthSyncEnabled: Boolean = false
+    val healthSyncEnabled: Boolean = false,
+    val autoEnterPip: Boolean = true
 ) {
     /**
      * Whether an FTP has been configured. Workouts cannot start without a valid FTP.
@@ -115,6 +116,7 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
         val KEY_FAVORITE_WORKOUTS = stringSetPreferencesKey("favorite_workout_filenames")
         val KEY_LAST_UPDATED = longPreferencesKey("profile_last_updated_epoch_ms")
         val KEY_HEALTH_SYNC_ENABLED = booleanPreferencesKey("health_sync_enabled")
+        val KEY_AUTO_ENTER_PIP = booleanPreferencesKey("auto_enter_pip")
 
         const val DEFAULT_WEIGHT_KG = 75.0f
         const val DEFAULT_CADENCE_FLOOR = 60
@@ -134,6 +136,7 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
         const val DEFAULT_BEGINNER_PATH_DISMISSED = false
         const val DEFAULT_BEGINNER_PATH_COLLAPSED = false
         const val DEFAULT_USE_KARVONEN_ZONES = false
+        const val DEFAULT_AUTO_ENTER_PIP = true
     }
 
     val userProfileFlow: Flow<UserProfile> = dataStore.data
@@ -171,7 +174,8 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
                 useKarvonenZones = preferences[KEY_USE_KARVONEN_ZONES] ?: DEFAULT_USE_KARVONEN_ZONES,
                 favoriteWorkoutFilenames = preferences[KEY_FAVORITE_WORKOUTS] ?: emptySet(),
                 lastUpdatedEpochMs = preferences[KEY_LAST_UPDATED] ?: 0L,
-                healthSyncEnabled = preferences[KEY_HEALTH_SYNC_ENABLED] ?: false
+                healthSyncEnabled = preferences[KEY_HEALTH_SYNC_ENABLED] ?: false,
+                autoEnterPip = preferences[KEY_AUTO_ENTER_PIP] ?: DEFAULT_AUTO_ENTER_PIP
             )
         }
 
@@ -284,6 +288,12 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun updateKeepScreenOn(keepScreenOn: Boolean) {
         dataStore.edit { preferences ->
             preferences[KEY_KEEP_SCREEN_ON] = keepScreenOn
+        }
+    }
+
+    suspend fun updateAutoEnterPip(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_AUTO_ENTER_PIP] = enabled
         }
     }
 

@@ -40,14 +40,37 @@ enum class AppScreen {
 }
 
 @Composable
-fun MainNavigation(onRequestPermissions: () -> Unit, modifier: Modifier = Modifier) {
+fun MainNavigation(
+    onRequestPermissions: () -> Unit,
+    modifier: Modifier = Modifier,
+    isInPipMode: Boolean = false,
+    onEnterPip: () -> Unit = {},
+    onAutoEnterPipChanged: (Boolean) -> Unit = {}
+) {
     val context = LocalContext.current
     val app = context.applicationContext as BikeApplication
     val sessionManager = app.workoutSessionManager
     val sessionState by sessionManager.sessionState.collectAsState()
 
+    val activeProfile by app.activeProfile.collectAsState()
+    val profileRepo = remember(activeProfile?.id) { app.userProfileRepository }
+    val userProfile by profileRepo.userProfileFlow.collectAsState(
+        initial = UserProfile()
+    )
+
     var currentScreen by rememberSaveable { mutableStateOf(AppScreen.DASHBOARD) }
     var editorFilename by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val shouldAutoPip = remember(sessionState.status, currentScreen, userProfile.autoEnterPip) {
+        com.valpr.bikecompanion.ui.workout.PipHelper.shouldAutoEnterPip(
+            status = sessionState.status,
+            currentScreen = currentScreen,
+            autoEnterPipEnabled = userProfile.autoEnterPip
+        )
+    }
+    LaunchedEffect(shouldAutoPip) {
+        onAutoEnterPipChanged(shouldAutoPip)
+    }
 
     // Editor draft owner hoisted so dashboard-initiated navigation can guard
     // against silently dropping unsaved edits (same instance the editor
@@ -97,8 +120,13 @@ fun MainNavigation(onRequestPermissions: () -> Unit, modifier: Modifier = Modifi
         )
     }
 
-    // If session transitions to COMPLETED, navigate to summary
-    if (sessionState.status == SessionStatus.COMPLETED && currentScreen != AppScreen.WORKOUT_SUMMARY) {
+    // If session transitions to COMPLETED, navigate to summary (defer while in PiP so
+    // the full summary scaffold does not render inside the tiny 16:9 PiP window;
+    // restores to summary immediately upon tapping/expanding the window).
+    if (sessionState.status == SessionStatus.COMPLETED &&
+        currentScreen != AppScreen.WORKOUT_SUMMARY &&
+        !isInPipMode
+    ) {
         currentScreen = AppScreen.WORKOUT_SUMMARY
     }
 
@@ -181,15 +209,10 @@ fun MainNavigation(onRequestPermissions: () -> Unit, modifier: Modifier = Modifi
         }
 
         AppScreen.ACTIVE_WORKOUT -> {
-            BackHandler {
+            BackHandler(enabled = !isInPipMode) {
                 // Return to dashboard but leave workout running in foreground service
                 currentScreen = AppScreen.DASHBOARD
             }
-            val activeProfile by app.activeProfile.collectAsState()
-            val profileRepo = remember(activeProfile?.id) { app.userProfileRepository }
-            val userProfile by profileRepo.userProfileFlow.collectAsState(
-                initial = UserProfile()
-            )
             val watchState by app.phoneWearableManager.watchState.collectAsState(
                 initial = com.valpr.bikecompanion.wearable.WearableWatchState()
             )
@@ -200,6 +223,8 @@ fun MainNavigation(onRequestPermissions: () -> Unit, modifier: Modifier = Modifi
                 },
                 keepScreenOn = userProfile.keepScreenOn,
                 watchState = watchState,
+                isInPipMode = isInPipMode,
+                onEnterPip = onEnterPip,
                 modifier = modifier
             )
         }

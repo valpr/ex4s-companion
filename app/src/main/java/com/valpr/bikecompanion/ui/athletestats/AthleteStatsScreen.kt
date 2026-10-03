@@ -1063,6 +1063,37 @@ fun AthleteStatsScreen(
                             onCheckedChange = { viewModel.updateKeepScreenOn(it) }
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 16.dp)
+                        ) {
+                            Text(
+                                "Auto-Enter Picture-in-Picture",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                "Shrinks the workout to a floating stats window when you switch to a video app mid-ride.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextMuted
+                            )
+                        }
+
+                        Switch(
+                            checked = profile.autoEnterPip,
+                            onCheckedChange = { viewModel.updateAutoEnterPip(it) }
+                        )
+                    }
                 }
             }
 

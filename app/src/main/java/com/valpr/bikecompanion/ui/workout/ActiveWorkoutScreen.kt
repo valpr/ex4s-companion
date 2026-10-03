@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Stop
@@ -82,38 +83,50 @@ fun ActiveWorkoutScreen(
     onFinish: () -> Unit,
     modifier: Modifier = Modifier,
     keepScreenOn: Boolean = true,
-    watchState: WearableWatchState = WearableWatchState()
+    watchState: WearableWatchState = WearableWatchState(),
+    isInPipMode: Boolean = false,
+    onEnterPip: (() -> Unit)? = null
 ) {
     val sessionState by sessionManager.sessionState.collectAsState()
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     val currentView = LocalView.current
-    DisposableEffect(keepScreenOn) {
-        currentView.keepScreenOn = keepScreenOn
+    val shouldKeepScreenOn = keepScreenOn && !isInPipMode
+    DisposableEffect(shouldKeepScreenOn) {
+        currentView.keepScreenOn = shouldKeepScreenOn
         onDispose {
             currentView.keepScreenOn = false
         }
     }
 
-    Surface(
-        modifier = modifier.fillMaxSize(),
-        color = Color(0xFF0E1117)
-    ) {
-        if (isLandscape) {
-            LandscapeWorkoutContent(
-                state = sessionState,
-                sessionManager = sessionManager,
-                onFinish = onFinish,
-                watchState = watchState
-            )
-        } else {
-            PortraitWorkoutContent(
-                state = sessionState,
-                sessionManager = sessionManager,
-                onFinish = onFinish,
-                watchState = watchState
-            )
+    if (isInPipMode) {
+        PipWorkoutContent(
+            state = sessionState,
+            modifier = modifier
+        )
+    } else {
+        Surface(
+            modifier = modifier.fillMaxSize(),
+            color = Color(0xFF0E1117)
+        ) {
+            if (isLandscape) {
+                LandscapeWorkoutContent(
+                    state = sessionState,
+                    sessionManager = sessionManager,
+                    onFinish = onFinish,
+                    watchState = watchState,
+                    onEnterPip = onEnterPip
+                )
+            } else {
+                PortraitWorkoutContent(
+                    state = sessionState,
+                    sessionManager = sessionManager,
+                    onFinish = onFinish,
+                    watchState = watchState,
+                    onEnterPip = onEnterPip
+                )
+            }
         }
     }
 }
@@ -143,7 +156,8 @@ private fun PortraitWorkoutContent(
     state: WorkoutSessionState,
     sessionManager: WorkoutSessionManager,
     onFinish: () -> Unit,
-    watchState: WearableWatchState = WearableWatchState()
+    watchState: WearableWatchState = WearableWatchState(),
+    onEnterPip: (() -> Unit)? = null
 ) {
     val manualControl = isManualResistanceControl(state)
     Column(
@@ -154,7 +168,7 @@ private fun PortraitWorkoutContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // Header & Status
-        WorkoutHeaderBar(state = state)
+        WorkoutHeaderBar(state = state, onEnterPip = onEnterPip)
 
         // Watch HR link status (live / stale / disconnected)
         WatchHrStatusRow(watchState = watchState)
@@ -211,7 +225,8 @@ private fun LandscapeWorkoutContent(
     state: WorkoutSessionState,
     sessionManager: WorkoutSessionManager,
     onFinish: () -> Unit,
-    watchState: WearableWatchState = WearableWatchState()
+    watchState: WearableWatchState = WearableWatchState(),
+    onEnterPip: (() -> Unit)? = null
 ) {
     val manualControl = isManualResistanceControl(state)
     Row(
@@ -227,7 +242,7 @@ private fun LandscapeWorkoutContent(
                 .fillMaxSize(),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            WorkoutHeaderBar(state = state)
+            WorkoutHeaderBar(state = state, onEnterPip = onEnterPip)
             WatchHrStatusRow(watchState = watchState)
             TheBigThree(state = state, watchState = watchState)
             if (state.workout != null && !manualControl) {
@@ -284,7 +299,10 @@ private fun LandscapeWorkoutContent(
 }
 
 @Composable
-private fun WorkoutHeaderBar(state: WorkoutSessionState) {
+private fun WorkoutHeaderBar(
+    state: WorkoutSessionState,
+    onEnterPip: (() -> Unit)? = null
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -311,17 +329,34 @@ private fun WorkoutHeaderBar(state: WorkoutSessionState) {
             )
         }
 
-        // Time Counter — single line so a long workout title squeezes with
-        // ellipsis instead of crushing the timer into vertical wrap.
-        Text(
-            state.formattedElapsedTime,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Black,
-            fontFamily = FontFamily.Monospace,
-            color = Color(0xFF00E676),
-            maxLines = 1,
-            softWrap = false
-        )
+        // Time Counter & PiP Button
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                state.formattedElapsedTime,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+                color = Color(0xFF00E676),
+                maxLines = 1,
+                softWrap = false
+            )
+            if (onEnterPip != null) {
+                IconButton(
+                    onClick = onEnterPip,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PictureInPictureAlt,
+                        contentDescription = "Enter Picture-in-Picture",
+                        tint = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+        }
     }
 }
 

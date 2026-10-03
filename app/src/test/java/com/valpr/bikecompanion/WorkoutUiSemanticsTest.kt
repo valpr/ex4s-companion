@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -559,5 +560,153 @@ class WorkoutUiSemanticsTest {
         composeRule.onNodeWithContentDescription("Delete").performClick()
         assertTrue(deleted)
         assertFalse(clicked)
+    }
+
+    @Test
+    fun pipContent_displaysPowerCadenceAndStatus() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(structuredWorkout())
+        managerTime(1100L)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(
+                sessionManager = manager,
+                onFinish = {},
+                isInPipMode = true
+            )
+        }
+
+        composeRule.onNodeWithTag("pip_content").assertIsDisplayed()
+        composeRule.onNodeWithTag("pip_power").assertIsDisplayed()
+        composeRule.onNodeWithTag("pip_cadence").assertIsDisplayed()
+        composeRule.onNodeWithTag("pip_timer").assertIsDisplayed()
+        composeRule.onNodeWithTag("pip_status").assertIsDisplayed()
+        composeRule.onNodeWithText("170").assertIsDisplayed()
+        composeRule.onNodeWithText("85").assertIsDisplayed()
+        composeRule.onNodeWithText("THE CLUTCH (BAILOUT)").assertDoesNotExist()
+    }
+
+    @Test
+    fun pipContent_withHeartRate_displaysHr() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+        manager.updateHeartRate(148)
+        managerTime(1100L)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(
+                sessionManager = manager,
+                onFinish = {},
+                isInPipMode = true
+            )
+        }
+
+        composeRule.onNodeWithTag("pip_hr").assertIsDisplayed()
+        composeRule.onNodeWithText("♥ 148").assertIsDisplayed()
+    }
+
+    @Test
+    fun activeWorkoutScreen_pipButton_triggersCallback() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+
+        var pipTriggered = false
+        composeRule.setContent {
+            ActiveWorkoutScreen(
+                sessionManager = manager,
+                onFinish = {},
+                onEnterPip = { pipTriggered = true }
+            )
+        }
+
+        composeRule.onNodeWithContentDescription("Enter Picture-in-Picture").performClick()
+        assertTrue(pipTriggered)
+    }
+
+    @Test
+    fun activeWorkoutScreen_isInPipMode_disablesKeepScreenOn() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+
+        var view: View? = null
+        var inPip by mutableStateOf(false)
+
+        composeRule.setContent {
+            view = LocalView.current
+            ActiveWorkoutScreen(
+                sessionManager = manager,
+                onFinish = {},
+                keepScreenOn = true,
+                isInPipMode = inPip
+            )
+        }
+
+        assertTrue(view!!.keepScreenOn)
+
+        inPip = true
+        composeRule.waitForIdle()
+
+        assertFalse(view!!.keepScreenOn)
+    }
+
+    @Test
+    fun pipContent_whenPaused_displaysPausedStatus() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(structuredWorkout())
+        managerTime(1100L)
+        manager.pauseWorkout()
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(
+                sessionManager = manager,
+                onFinish = {},
+                isInPipMode = true
+            )
+        }
+
+        composeRule.onNodeWithText("PAUSED").assertIsDisplayed()
+    }
+
+    @Test
+    fun pipContent_whenZeroHr_displaysSecondaryResistanceAndSpeed() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(
+                sessionManager = manager,
+                onFinish = {},
+                isInPipMode = true
+            )
+        }
+
+        composeRule.onNodeWithTag("pip_secondary").assertIsDisplayed()
+        composeRule.onNodeWithText("L10").assertIsDisplayed()
+    }
+
+    @Test
+    fun pipContent_whenBailout_displaysBailoutStatus() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(structuredWorkout())
+        managerTime(1100L)
+        manager.toggleClutch()
+        managerTime(1100L)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(
+                sessionManager = manager,
+                onFinish = {},
+                isInPipMode = true
+            )
+        }
+
+        composeRule.onNodeWithText("BAILOUT").assertIsDisplayed()
     }
 }

@@ -46,6 +46,7 @@ class AthleteStatsUiTest {
         composeRule.onNodeWithText("Bike & Hardware Settings").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Display & Screen Settings").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Keep Screen Awake During Workouts").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Auto-Enter Picture-in-Picture").performScrollTo().assertIsDisplayed()
 
         // Hardware section is initially collapsed
         composeRule.onNodeWithText("Bluetooth Setup").assertDoesNotExist()
