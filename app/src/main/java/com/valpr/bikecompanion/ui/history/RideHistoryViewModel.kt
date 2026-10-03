@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 class RideHistoryViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as BikeApplication
-    private val historyRepository = app.workoutHistoryRepository
+    private fun historyRepository() = app.workoutHistoryRepository
 
     private val _headers = MutableStateFlow<List<RideHeader>>(emptyList())
     val headers: StateFlow<List<RideHeader>> = _headers.asStateFlow()
@@ -36,7 +36,7 @@ class RideHistoryViewModel(application: Application) : AndroidViewModel(applicat
 
     fun refresh() {
         viewModelScope.launch(Dispatchers.IO) {
-            _headers.value = historyRepository.listHeaders()
+            _headers.value = historyRepository().listHeaders()
         }
     }
 
@@ -45,7 +45,7 @@ class RideHistoryViewModel(application: Application) : AndroidViewModel(applicat
         _selectedRide.value = null
         _isLoadingRide.value = true
         viewModelScope.launch(Dispatchers.IO) {
-            _selectedRide.value = historyRepository.loadRide(id)
+            _selectedRide.value = historyRepository().loadRide(id)
             _isLoadingRide.value = false
         }
     }
@@ -65,8 +65,8 @@ class RideHistoryViewModel(application: Application) : AndroidViewModel(applicat
     fun confirmDelete() {
         val header = _pendingDelete.value ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            historyRepository.delete(header.id)
-            _headers.value = historyRepository.listHeaders()
+            historyRepository().delete(header.id)
+            _headers.value = historyRepository().listHeaders()
             if (_selectedRide.value?.id == header.id) {
                 _selectedRide.value = null
             }

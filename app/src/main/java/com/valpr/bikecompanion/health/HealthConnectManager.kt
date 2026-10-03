@@ -558,6 +558,7 @@ class HealthConnectManager(
 
     private var lastSummary: WorkoutSummary? = null
     private var lastWeightKg: Float = 75.0f
+    private var lastProfileId: String? = null
     private val syncMutex = Mutex()
 
     private fun clientOrNull(): HealthConnectClient? = try {
@@ -594,10 +595,13 @@ class HealthConnectManager(
     /**
      * Batch-writes a completed workout. Safe to call repeatedly — records the
      * request for [retry] and reports progress via [syncState].
+     * @param profileId active profile id, namespaced into clientRecordId so
+     * profiles never collide on dedup checks in shared Health Connect storage.
      */
-    fun syncWorkout(summary: WorkoutSummary, weightKg: Float) {
+    fun syncWorkout(summary: WorkoutSummary, weightKg: Float, profileId: String? = null) {
         lastSummary = summary
         lastWeightKg = weightKg
+        lastProfileId = profileId
         scope.launch {
             syncMutex.withLock {
                 _syncState.value = HealthSyncState.Syncing
@@ -619,7 +623,10 @@ class HealthConnectManager(
                 }
                 try {
                     val plan = planRecords(summary, weightKg.toDouble())
-                    val clientRecordId = CompletedRide.rideIdFor(plan.sessionStartEpochMs)
+                    val clientRecordId = CompletedRide.healthClientRecordIdFor(
+                        lastProfileId,
+                        plan.sessionStartEpochMs
+                    )
 
                     // Pre-read dedup check: verify session hasn't already been written
                     val start = Instant.ofEpochMilli(plan.sessionStartEpochMs)
@@ -674,7 +681,7 @@ class HealthConnectManager(
     /** Re-attempts the last sync (used by the summary retry button). */
     fun retry() {
         val summary = lastSummary ?: return
-        syncWorkout(summary, lastWeightKg)
+        syncWorkout(summary, lastWeightKg, lastProfileId)
     }
 
     fun reset() {

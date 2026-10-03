@@ -11,26 +11,49 @@ import com.valpr.bikecompanion.shared.UnitSystem
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class AthleteStatsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as BikeApplication
-    private val userProfileRepo = app.userProfileRepository
+    private fun userProfileRepo() = app.userProfileRepository
     val bleManager = app.bleManager
     val healthConnectReader = app.healthConnectReader
 
-    val userProfile: StateFlow<UserProfile> = userProfileRepo.userProfileFlow
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = UserProfile()
-        )
+    private val _userProfile = MutableStateFlow(UserProfile())
+    val userProfile: StateFlow<UserProfile> = _userProfile.asStateFlow()
+
+    /** Name of the profile holding the Health Connect sync lock (null when free/held here). */
+    private val _healthSyncLockedBy = MutableStateFlow<String?>(null)
+    val healthSyncLockedBy: StateFlow<String?> = _healthSyncLockedBy.asStateFlow()
+
+    private var profileJob: kotlinx.coroutines.Job? = null
+
+    init {
+        viewModelScope.launch {
+            app.activeProfile.collect {
+                profileJob?.cancel()
+                val repo = app.userProfileRepository
+                profileJob = viewModelScope.launch {
+                    repo.userProfileFlow.collect { _userProfile.value = it }
+                }
+                refreshHealthSyncHolder()
+            }
+        }
+    }
+
+    fun refreshHealthSyncHolder() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                _healthSyncLockedBy.value = app.healthSyncHolder()?.name
+            } catch (_: Exception) {
+                _healthSyncLockedBy.value = null
+            }
+        }
+    }
 
     private val _importPreview = MutableStateFlow<HealthImportPreview?>(null)
     val importPreview: StateFlow<HealthImportPreview?> = _importPreview.asStateFlow()
@@ -77,7 +100,7 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
                 return@launch
             }
 
-            userProfileRepo.applyHealthImport(
+            userProfileRepo().applyHealthImport(
                 weightKg = weight,
                 heightCm = height,
                 restingHeartRate = restingHr
@@ -99,19 +122,19 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
 
     fun updateFtp(ftp: Int) {
         viewModelScope.launch {
-            userProfileRepo.updateFtp(ftp)
+            userProfileRepo().updateFtp(ftp)
         }
     }
 
     fun updateWeight(weightKg: Float) {
         viewModelScope.launch {
-            userProfileRepo.updateWeight(weightKg)
+            userProfileRepo().updateWeight(weightKg)
         }
     }
 
     fun updateAthleteBio(age: Int, weightKg: Float, heightCm: Float, sex: BiologicalSex) {
         viewModelScope.launch {
-            userProfileRepo.updateAthleteBio(
+            userProfileRepo().updateAthleteBio(
                 age = age,
                 weightKg = weightKg,
                 heightCm = heightCm,
@@ -123,7 +146,7 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
 
     fun updatePowerSettings(ftp: Int, preferredCadenceRpm: Int) {
         viewModelScope.launch {
-            userProfileRepo.updatePowerSettings(
+            userProfileRepo().updatePowerSettings(
                 ftp = ftp,
                 preferredCadenceRpm = preferredCadenceRpm
             )
@@ -133,7 +156,7 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
 
     fun updateHeartRateSettings(maxHr: Int, criticalHr: Int, restingHr: Int, lthr: Int) {
         viewModelScope.launch {
-            userProfileRepo.updateHeartRateSettings(
+            userProfileRepo().updateHeartRateSettings(
                 maxHr = maxHr,
                 criticalHr = criticalHr,
                 restingHr = restingHr,
@@ -145,20 +168,20 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
 
     fun setUseKarvonenZones(enabled: Boolean) {
         viewModelScope.launch {
-            userProfileRepo.setUseKarvonenZones(enabled)
+            userProfileRepo().setUseKarvonenZones(enabled)
             _saveEvents.tryEmit(if (enabled) "Karvonen HRR zones enabled" else "Standard % Max HR zones enabled")
         }
     }
 
     fun updateUnitSystem(unitSystem: UnitSystem) {
         viewModelScope.launch {
-            userProfileRepo.updateUnitSystem(unitSystem)
+            userProfileRepo().updateUnitSystem(unitSystem)
         }
     }
 
     fun updateEngineTuning(cadenceFloorRpm: Int, cadenceRecoveryRpm: Int, kp: Float, ki: Float) {
         viewModelScope.launch {
-            userProfileRepo.updateEngineTuning(
+            userProfileRepo().updateEngineTuning(
                 cadenceFloorRpm = cadenceFloorRpm,
                 cadenceRecoveryRpm = cadenceRecoveryRpm,
                 kp = kp,
@@ -170,7 +193,7 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
 
     fun resetEngineTuningToDefaults() {
         viewModelScope.launch {
-            userProfileRepo.updateEngineTuning(
+            userProfileRepo().updateEngineTuning(
                 cadenceFloorRpm = 60,
                 cadenceRecoveryRpm = 75,
                 kp = 0.05f,
@@ -184,9 +207,41 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
         bleManager.autoConnect = enabled
     }
 
+    /** Shares the newest BLE packet log, or explains why none exists yet. */
+    fun sharePacketLog() {
+        val file = bleManager.packetLogRecorder.latestLogFile()
+        if (file == null) {
+            _saveEvents.tryEmit("No packet log yet — connect to the bike first")
+            return
+        }
+        try {
+            com.valpr.bikecompanion.history.PacketLogShareHelper.shareLog(app.applicationContext, file)
+        } catch (_: Exception) {
+            _saveEvents.tryEmit("Packet log share unavailable")
+        }
+    }
+
     fun updateKeepScreenOn(enabled: Boolean) {
         viewModelScope.launch {
-            userProfileRepo.updateKeepScreenOn(enabled)
+            userProfileRepo().updateKeepScreenOn(enabled)
+        }
+    }
+
+    fun setHealthSyncEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            val result = app.setHealthSyncEnabledForActive(enabled)
+            refreshHealthSyncHolder()
+            if (result.isSuccess) {
+                _saveEvents.tryEmit(
+                    if (enabled) {
+                        "Health Connect sync enabled for this profile"
+                    } else {
+                        "Health Connect sync disabled for this profile"
+                    }
+                )
+            } else {
+                _saveEvents.tryEmit(result.exceptionOrNull()?.message ?: "Couldn't change Health Connect sync")
+            }
         }
     }
 }

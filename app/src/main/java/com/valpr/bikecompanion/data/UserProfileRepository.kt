@@ -23,6 +23,14 @@ import java.io.IOException
 
 val Context.userProfileDataStore: DataStore<Preferences> by preferencesDataStore(name = "user_profile")
 
+/** Per-profile athlete DataStore (see ProfileRepository.userProfileStoreName). */
+fun Context.userProfileDataStoreFor(profileId: String): DataStore<Preferences> {
+    val safe = profileId.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(48)
+    return androidx.datastore.preferences.core.PreferenceDataStoreFactory.create(
+        produceFile = { java.io.File(filesDir, "datastore/user_profile_$safe.preferences_pb") }
+    )
+}
+
 /**
  * Athlete profile data required for power target calculations and ERG tuning.
  */
@@ -47,7 +55,8 @@ data class UserProfile(
     val beginnerPathCollapsed: Boolean = false,
     val useKarvonenZones: Boolean = false,
     val favoriteWorkoutFilenames: Set<String> = emptySet(),
-    val lastUpdatedEpochMs: Long = 0L
+    val lastUpdatedEpochMs: Long = 0L,
+    val healthSyncEnabled: Boolean = false
 ) {
     /**
      * Whether an FTP has been configured. Workouts cannot start without a valid FTP.
@@ -105,6 +114,7 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
         val KEY_USE_KARVONEN_ZONES = booleanPreferencesKey("use_karvonen_zones")
         val KEY_FAVORITE_WORKOUTS = stringSetPreferencesKey("favorite_workout_filenames")
         val KEY_LAST_UPDATED = longPreferencesKey("profile_last_updated_epoch_ms")
+        val KEY_HEALTH_SYNC_ENABLED = booleanPreferencesKey("health_sync_enabled")
 
         const val DEFAULT_WEIGHT_KG = 75.0f
         const val DEFAULT_CADENCE_FLOOR = 60
@@ -160,7 +170,8 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
                 beginnerPathCollapsed = preferences[KEY_BEGINNER_PATH_COLLAPSED] ?: DEFAULT_BEGINNER_PATH_COLLAPSED,
                 useKarvonenZones = preferences[KEY_USE_KARVONEN_ZONES] ?: DEFAULT_USE_KARVONEN_ZONES,
                 favoriteWorkoutFilenames = preferences[KEY_FAVORITE_WORKOUTS] ?: emptySet(),
-                lastUpdatedEpochMs = preferences[KEY_LAST_UPDATED] ?: 0L
+                lastUpdatedEpochMs = preferences[KEY_LAST_UPDATED] ?: 0L,
+                healthSyncEnabled = preferences[KEY_HEALTH_SYNC_ENABLED] ?: false
             )
         }
 
@@ -273,6 +284,12 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun updateKeepScreenOn(keepScreenOn: Boolean) {
         dataStore.edit { preferences ->
             preferences[KEY_KEEP_SCREEN_ON] = keepScreenOn
+        }
+    }
+
+    suspend fun setHealthSyncEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_HEALTH_SYNC_ENABLED] = enabled
         }
     }
 

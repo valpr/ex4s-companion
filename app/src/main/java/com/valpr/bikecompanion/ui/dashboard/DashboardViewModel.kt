@@ -36,19 +36,23 @@ class DashboardViewModel @JvmOverloads constructor(
     val workoutRepository = app.workoutRepository
     val sessionManager = app.workoutSessionManager
     val sessionState: StateFlow<WorkoutSessionState> = sessionManager.sessionState
-    val historyRepository = app.workoutHistoryRepository
     val phoneWearableManager = app.phoneWearableManager
     val watchState = phoneWearableManager.watchState
-    val userProfileRepo = app.userProfileRepository
 
-    val userProfile: StateFlow<UserProfile> = userProfileRepo.userProfileFlow
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = UserProfile()
-        )
+    val profiles: StateFlow<List<com.valpr.bikecompanion.data.Profile>> = app.profileRepository.profiles
+    val activeProfile: StateFlow<com.valpr.bikecompanion.data.Profile?> = app.activeProfile
 
-    private val favoriteFilenamesFlow = userProfileRepo.userProfileFlow
+    private fun currentUserProfileRepo() = app.userProfileRepository
+    private fun currentHistoryRepo() = app.workoutHistoryRepository
+    val userProfileRepo get() = app.userProfileRepository
+    val historyRepository get() = app.workoutHistoryRepository
+
+    private val _userProfile = MutableStateFlow(UserProfile())
+    val userProfile: StateFlow<UserProfile> = _userProfile.asStateFlow()
+
+    private var profileCollectJob: kotlinx.coroutines.Job? = null
+
+    private val favoriteFilenamesFlow = _userProfile
         .map { it.favoriteWorkoutFilenames }
         .distinctUntilChanged()
 
@@ -142,6 +146,18 @@ class DashboardViewModel @JvmOverloads constructor(
     private val importUseCase = WorkoutImportUseCase(workoutRepository)
 
     init {
+        // Rebind to the active profile's DataStore + history on every switch.
+        viewModelScope.launch {
+            app.activeProfile.collect { profile ->
+                profileCollectJob?.cancel()
+                if (profile == null) return@collect
+                val repo = app.userProfileRepository
+                profileCollectJob = viewModelScope.launch {
+                    repo.userProfileFlow.collect { _userProfile.value = it }
+                }
+                loadHistory()
+            }
+        }
         loadWorkouts()
         loadHistory()
         refreshWatchConnection()
@@ -164,7 +180,7 @@ class DashboardViewModel @JvmOverloads constructor(
 
     fun loadHistory() {
         viewModelScope.launch(ioDispatcher) {
-            val headers = historyRepository.listHeaders()
+            val headers = currentHistoryRepo().listHeaders()
             _historyHeaders.value = headers
             _completedFilenames.value = headers.mapNotNull {
                 it.sourceWorkoutFilename?.lowercase()
@@ -223,7 +239,7 @@ class DashboardViewModel @JvmOverloads constructor(
     fun deleteWorkout(filename: String) {
         viewModelScope.launch(ioDispatcher) {
             workoutRepository.deleteWorkout(filename)
-            userProfileRepo.removeFavoriteWorkout(filename)
+            currentUserProfileRepo().removeFavoriteWorkout(filename)
             loadWorkouts()
             if (_selectedWorkoutFilename.value == filename) {
                 _selectedWorkoutPreview.value = null
@@ -234,19 +250,19 @@ class DashboardViewModel @JvmOverloads constructor(
 
     fun updateFtp(ftp: Int) {
         viewModelScope.launch(ioDispatcher) {
-            userProfileRepo.updateFtp(ftp)
+            currentUserProfileRepo().updateFtp(ftp)
         }
     }
 
     fun setBeginnerPathDismissed(dismissed: Boolean) {
         viewModelScope.launch(ioDispatcher) {
-            userProfileRepo.updateBeginnerPathDismissed(dismissed)
+            currentUserProfileRepo().updateBeginnerPathDismissed(dismissed)
         }
     }
 
     fun setBeginnerPathCollapsed(collapsed: Boolean) {
         viewModelScope.launch(ioDispatcher) {
-            userProfileRepo.updateBeginnerPathCollapsed(collapsed)
+            currentUserProfileRepo().updateBeginnerPathCollapsed(collapsed)
         }
     }
 
@@ -268,7 +284,69 @@ class DashboardViewModel @JvmOverloads constructor(
 
     fun toggleFavoriteWorkout(filename: String) {
         viewModelScope.launch(ioDispatcher) {
-            userProfileRepo.toggleFavoriteWorkout(filename)
+            currentUserProfileRepo().toggleFavoriteWorkout(filename)
+        }
+    }
+
+    // ---- Profiles (switcher owns create/rename/color/delete) ----
+
+    /** True while a session is active — switching is blocked then. */
+    fun isSwitchBlocked(): Boolean {
+        val status = sessionManager.sessionState.value.status
+        return status == com.valpr.bikecompanion.workout.SessionStatus.RUNNING ||
+            status == com.valpr.bikecompanion.workout.SessionStatus.PAUSED
+    }
+
+    fun switchProfile(profileId: String) {
+        if (isSwitchBlocked()) {
+            _errorMessage.value = "End or discard the current ride to switch profiles"
+            return
+        }
+        viewModelScope.launch(ioDispatcher) {
+            val ok = app.switchProfile(profileId)
+            if (!ok) _errorMessage.value = "Couldn't switch profiles"
+        }
+    }
+
+    fun createProfile(name: String, colorArgb: Int) {
+        if (isSwitchBlocked()) {
+            _errorMessage.value = "End or discard the current ride to switch profiles"
+            return
+        }
+        viewModelScope.launch(ioDispatcher) {
+            val result = app.createAndSwitchProfile(name, colorArgb)
+            if (result.isFailure) {
+                _errorMessage.value = result.exceptionOrNull()?.message ?: "Couldn't create profile"
+            }
+        }
+    }
+
+    fun renameProfile(profileId: String, name: String) {
+        viewModelScope.launch(ioDispatcher) {
+            val result = app.profileRepository.renameProfile(profileId, name)
+            if (result.isFailure) {
+                _errorMessage.value = result.exceptionOrNull()?.message ?: "Couldn't rename profile"
+            } else {
+                app.refreshActiveProfile()
+            }
+        }
+    }
+
+    fun setProfileColor(profileId: String, colorArgb: Int) {
+        viewModelScope.launch(ioDispatcher) {
+            app.profileRepository.setColor(profileId, colorArgb)
+            app.refreshActiveProfile()
+        }
+    }
+
+    fun deleteProfile(profileId: String) {
+        if (isSwitchBlocked()) {
+            _errorMessage.value = "End or discard the current ride to change profiles"
+            return
+        }
+        viewModelScope.launch(ioDispatcher) {
+            val ok = app.deleteProfile(profileId)
+            if (!ok) _errorMessage.value = "Couldn't delete that profile"
         }
     }
 

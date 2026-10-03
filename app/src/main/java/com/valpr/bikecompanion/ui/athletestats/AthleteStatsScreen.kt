@@ -116,6 +116,7 @@ fun AthleteStatsScreen(
     val discoveredDevices by viewModel.bleManager.discoveredDevices.collectAsState()
     val isImportLoading by viewModel.isImportLoading.collectAsState()
     val importPreview by viewModel.importPreview.collectAsState()
+    val healthSyncLockedBy by viewModel.healthSyncLockedBy.collectAsState()
 
     var showScanDialog by remember { mutableStateOf(false) }
     var isHardwareExpanded by remember { mutableStateOf(false) }
@@ -762,6 +763,15 @@ fun AthleteStatsScreen(
 
                             Spacer(modifier = Modifier.height(8.dp))
 
+                            OutlinedButton(
+                                onClick = { viewModel.sharePacketLog() },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Share packet log")
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
                             var macInput by remember { mutableStateOf("") }
                             var macError by remember { mutableStateOf<String?>(null) }
                             OutlinedTextField(
@@ -792,6 +802,31 @@ fun AthleteStatsScreen(
 
                             // Health Connect Sub-card
                             Text("Health Connect Integration", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Per-profile exclusive sync toggle (one holder device-wide).
+                            val syncLockedByOther = healthSyncLockedBy != null && !profile.healthSyncEnabled
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Sync workouts here", modifier = Modifier.weight(1f))
+                                Switch(
+                                    checked = profile.healthSyncEnabled,
+                                    enabled = !syncLockedByOther,
+                                    onCheckedChange = { viewModel.setHealthSyncEnabled(it) }
+                                )
+                            }
+                            Text(
+                                if (syncLockedByOther) {
+                                    "Linked to $healthSyncLockedBy — disable it there first"
+                                } else {
+                                    "Only one profile can sync at a time"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextMuted
+                            )
                             Spacer(modifier = Modifier.height(8.dp))
 
                             val availabilityText = when (healthStatus.providerAvailable) {

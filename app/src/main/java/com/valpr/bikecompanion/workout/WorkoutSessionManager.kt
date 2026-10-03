@@ -134,6 +134,7 @@ class WorkoutSessionManager(
     val hapticAlerts: SharedFlow<HapticAlertType> = _hapticAlerts.asSharedFlow()
 
     private var sessionJob: Job? = null
+    private var profileJob: Job? = null
     private val recordedSamples = mutableListOf<WorkoutMetricSample>()
     private var athleteFtp: Int = 200
     private var athleteFtpConfigured: Boolean = false
@@ -142,6 +143,7 @@ class WorkoutSessionManager(
     private var useKarvonenZones: Boolean = false
     private var athleteCriticalHr: Int = 175
     private var athletePreferredCadence: Int = 85
+    private var configuredCadenceFloorRpm: Double = 60.0
     private var sessionStartEpochMs: Long = 0L
     private var pauseOdometerSnapshotKm: Double = 0.0
     private var pausedDistanceKm: Double = 0.0
@@ -159,28 +161,40 @@ class WorkoutSessionManager(
         }
 
         // Observe athlete profile to tune ERG controller and update FTP
-        scope.launch {
-            userProfileFlow.collect { profile ->
-                athleteFtp = if (profile.isFtpConfigured) profile.ftp else 200
-                athleteFtpConfigured = profile.isFtpConfigured
-                athleteMaxHr = profile.maxHeartRate
-                athleteRestingHr = profile.restingHeartRate
-                useKarvonenZones = profile.useKarvonenZones
-                athleteCriticalHr = profile.criticalHeartRate
+        bindUserProfileFlow(userProfileFlow)
+    }
+
+    /**
+     * Rebinds the athlete profile source (profile switching). Safe only while
+     * no session is RUNNING/PAUSED — callers must guard the switch.
+     */
+    fun bindUserProfileFlow(flow: kotlinx.coroutines.flow.Flow<UserProfile>) {
+        profileJob?.cancel()
+        profileJob = scope.launch {
+            flow.collect { profile -> applyUserProfile(profile) }
+        }
+    }
+
+    private fun applyUserProfile(profile: UserProfile) {
+        athleteFtp = if (profile.isFtpConfigured) profile.ftp else 200
+        athleteFtpConfigured = profile.isFtpConfigured
+        athleteMaxHr = profile.maxHeartRate
+        athleteRestingHr = profile.restingHeartRate
+        useKarvonenZones = profile.useKarvonenZones
+        athleteCriticalHr = profile.criticalHeartRate
+        athletePreferredCadence = profile.preferredCadenceRpm
+        ergController.kp = profile.ergKp.toDouble()
+        ergController.ki = profile.ergKi.toDouble()
+        configuredCadenceFloorRpm = profile.cadenceFloorRpm.toDouble()
+        ergController.cadenceFloorRpm = configuredCadenceFloorRpm
+        ergController.recoveryThresholdRpm = profile.cadenceRecoveryRpm.toDouble()
+        _sessionState.update {
+            it.copy(
+                athleteMaxHr = profile.maxHeartRate,
+                athleteRestingHr = profile.restingHeartRate,
+                useKarvonenZones = profile.useKarvonenZones,
                 athletePreferredCadence = profile.preferredCadenceRpm
-                ergController.kp = profile.ergKp.toDouble()
-                ergController.ki = profile.ergKi.toDouble()
-                ergController.cadenceFloorRpm = profile.cadenceFloorRpm.toDouble()
-                ergController.recoveryThresholdRpm = profile.cadenceRecoveryRpm.toDouble()
-                _sessionState.update {
-                    it.copy(
-                        athleteMaxHr = profile.maxHeartRate,
-                        athleteRestingHr = profile.restingHeartRate,
-                        useKarvonenZones = profile.useKarvonenZones,
-                        athletePreferredCadence = profile.preferredCadenceRpm
-                    )
-                }
-            }
+            )
         }
     }
 
@@ -408,6 +422,13 @@ class WorkoutSessionManager(
                 val targetWatts = workout?.targetWattsAt(athleteFtp, elapsed, current.intensityScale)
                 val targetCadence = workout?.targetCadenceAt(elapsed)
                 val activeCues = workout?.activeTextEventsAt(elapsed) ?: emptyList()
+
+                // Target-aware bailout floor: low-cadence prescriptions get
+                // dip margin (target − 15) instead of the global floor, since
+                // prescriptions change per segment. Applied before every
+                // update so mid-ride retunes and segment changes both land.
+                ergController.cadenceFloorRpm =
+                    ErgController.effectiveFloor(configuredCadenceFloorRpm, targetCadence)
 
                 // Execute ERG controller update
                 val telemetry = current.latestTelemetry

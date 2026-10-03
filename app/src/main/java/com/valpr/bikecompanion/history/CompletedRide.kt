@@ -124,6 +124,18 @@ data class CompletedRide(
         fun rideIdFor(startTimeEpochMs: Long): String = "ride_$startTimeEpochMs"
 
         /**
+         * Health Connect clientRecordId namespaced per profile so two profiles
+         * syncing rides in the same time window never collide on dedup checks.
+         * Local history filenames stay un-namespaced (dirs already isolate).
+         */
+        fun healthClientRecordIdFor(profileId: String?, startTimeEpochMs: Long): String {
+            val base = rideIdFor(startTimeEpochMs)
+            if (profileId.isNullOrBlank()) return base
+            val safe = profileId.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(12)
+            return "${base}_$safe"
+        }
+
+        /**
          * Stable id for sessions with no start timestamp (never happens for real
          * sessions — the manager always stamps start — but keeps re-saves of the
          * same zero-start summary idempotent instead of minting a fresh id per call).

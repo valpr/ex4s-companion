@@ -1,5 +1,8 @@
 package com.valpr.bikecompanion.ui.dashboard
 
+import android.app.Activity
+import android.bluetooth.BluetoothAdapter
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -33,6 +36,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
+import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
@@ -138,6 +142,8 @@ fun DashboardScreen(
     val historyHeaders by viewModel.historyHeaders.collectAsState()
     val completedFilenames by viewModel.completedFilenames.collectAsState()
     val completionCountMap by viewModel.completionCountMap.collectAsState()
+    val profiles by viewModel.profiles.collectAsState()
+    val activeProfile by viewModel.activeProfile.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.loadHistory()
@@ -150,8 +156,24 @@ fun DashboardScreen(
     var workoutToDelete by remember { mutableStateOf<CachedWorkoutHeader?>(null) }
 
     val snackbarHostState = remember { SnackbarHostState() }
+    val dashboardScope = rememberCoroutineScope()
 
     val isBikeConnected = WorkoutStartGate.canStartWorkout(bleState)
+    val isBluetoothEnabled by viewModel.bleManager.isBluetoothEnabled.collectAsState()
+
+    // System prompt to switch phone Bluetooth on (BLUETOOTH_CONNECT-gated on S+;
+    // SecurityException falls back to a Settings snackbar below).
+    val enableBluetoothLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.bleManager.startScan()
+        } else {
+            dashboardScope.launch {
+                snackbarHostState.showSnackbar("Bluetooth is still off — the bike needs Bluetooth on.")
+            }
+        }
+    }
 
     LaunchedEffect(errorMessage) {
         errorMessage?.let {
@@ -393,6 +415,17 @@ fun DashboardScreen(
             TopAppBar(
                 title = { Text("EX-4S Companion", fontWeight = FontWeight.Bold) },
                 actions = {
+                    ProfileSwitcher(
+                        profiles = profiles,
+                        activeProfile = activeProfile,
+                        sessionBlocked = sessionState.status == SessionStatus.RUNNING ||
+                            sessionState.status == SessionStatus.PAUSED,
+                        onSwitch = { viewModel.switchProfile(it) },
+                        onCreate = { name, color -> viewModel.createProfile(name, color) },
+                        onRename = { id, name -> viewModel.renameProfile(id, name) },
+                        onColor = { id, color -> viewModel.setProfileColor(id, color) },
+                        onDelete = { viewModel.deleteProfile(it) }
+                    )
                     IconButton(onClick = onNavigateToAthleteStats) {
                         Icon(Icons.Default.Person, contentDescription = "Stats")
                     }
@@ -413,6 +446,34 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item { Spacer(modifier = Modifier.height(2.dp)) }
+
+            // Phone Bluetooth off: prompt to switch it on before anything BLE.
+            if (!isBluetoothEnabled) {
+                item {
+                    BluetoothDisabledCard(
+                        hasAdapter = viewModel.bleManager.hasBluetoothAdapter,
+                        onEnableClick = {
+                            try {
+                                enableBluetoothLauncher.launch(
+                                    Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                                )
+                            } catch (e: SecurityException) {
+                                dashboardScope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        "Bluetooth permission needed — please switch Bluetooth on in system Settings."
+                                    )
+                                }
+                            } catch (e: Exception) {
+                                dashboardScope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        "Couldn't open Bluetooth settings — please switch Bluetooth on manually."
+                                    )
+                                }
+                            }
+                        }
+                    )
+                }
+            }
 
             // 1. Connection Status Banner
             item {
@@ -596,6 +657,56 @@ fun DashboardScreen(
             }
 
             item { Spacer(modifier = Modifier.height(20.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun BluetoothDisabledCard(
+    hasAdapter: Boolean,
+    onEnableClick: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF4A0E0E)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.BluetoothDisabled,
+                contentDescription = null,
+                tint = Color(0xFFFF8A80),
+                modifier = Modifier.size(28.dp)
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Phone Bluetooth is off", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text(
+                    if (hasAdapter) {
+                        "Turn it on to find and stay connected to your EX-4S."
+                    } else {
+                        "This device reports no Bluetooth adapter."
+                    },
+                    fontSize = 12.sp,
+                    color = Color(0xFFFFCDD2)
+                )
+            }
+
+            if (hasAdapter) {
+                Button(
+                    onClick = onEnableClick,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Turn On", fontSize = 12.sp)
+                }
+            }
         }
     }
 }

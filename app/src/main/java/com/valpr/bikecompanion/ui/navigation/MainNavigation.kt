@@ -10,6 +10,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -184,7 +185,9 @@ fun MainNavigation(onRequestPermissions: () -> Unit, modifier: Modifier = Modifi
                 // Return to dashboard but leave workout running in foreground service
                 currentScreen = AppScreen.DASHBOARD
             }
-            val userProfile by app.userProfileRepository.userProfileFlow.collectAsState(
+            val activeProfile by app.activeProfile.collectAsState()
+            val profileRepo = remember(activeProfile?.id) { app.userProfileRepository }
+            val userProfile by profileRepo.userProfileFlow.collectAsState(
                 initial = UserProfile()
             )
             val watchState by app.phoneWearableManager.watchState.collectAsState(
@@ -209,7 +212,9 @@ fun MainNavigation(onRequestPermissions: () -> Unit, modifier: Modifier = Modifi
             }
             val healthManager = app.healthConnectManager
             val syncState by healthManager.syncState.collectAsState()
-            val userProfile by app.userProfileRepository.userProfileFlow.collectAsState(
+            val activeProfile by app.activeProfile.collectAsState()
+            val profileRepo = remember(activeProfile?.id) { app.userProfileRepository }
+            val userProfile by profileRepo.userProfileFlow.collectAsState(
                 initial = UserProfile()
             )
             val permissionLauncher = rememberLauncherForActivityResult(
@@ -220,10 +225,19 @@ fun MainNavigation(onRequestPermissions: () -> Unit, modifier: Modifier = Modifi
                 }
             }
             sessionState.summary?.let { summary ->
-                // Batch-write to Health Connect once per completed session.
+                // Batch-write to Health Connect once per completed session (only when
+                // the active profile opted in — consent is per-profile).
                 // Persist to local ride history (idempotent on start epoch).
                 LaunchedEffect(summary) {
-                    healthManager.syncWorkout(summary, userProfile.weightKg)
+                    if (userProfile.healthSyncEnabled) {
+                        healthManager.syncWorkout(
+                            summary,
+                            userProfile.weightKg,
+                            app.activeProfileIdOrNull()
+                        )
+                    } else {
+                        healthManager.reset()
+                    }
                     try {
                         // Prefer the real library filename threaded through startWorkout();
                         // fall back to name-based matching for sessions started before it existed.
