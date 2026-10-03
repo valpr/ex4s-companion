@@ -166,7 +166,7 @@ object WorkoutFilterSortHelper {
             durationMatched.filter { w ->
                 tokens.all { token ->
                     w.name.contains(token, ignoreCase = true) ||
-                        w.author.contains(token, ignoreCase = true) ||
+                        WorkoutPresentation.formatAuthor(w.author).contains(token, ignoreCase = true) ||
                         w.description.contains(token, ignoreCase = true) ||
                         w.tags.any { it.contains(token, ignoreCase = true) }
                 }

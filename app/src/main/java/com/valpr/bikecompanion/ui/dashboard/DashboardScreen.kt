@@ -106,6 +106,7 @@ import com.valpr.bikecompanion.workout.SessionStatus
 import com.valpr.bikecompanion.workout.TagCount
 import com.valpr.bikecompanion.workout.Workout
 import com.valpr.bikecompanion.workout.WorkoutDurationBracket
+import com.valpr.bikecompanion.workout.WorkoutPresentation
 import com.valpr.bikecompanion.workout.WorkoutSessionState
 import com.valpr.bikecompanion.workout.WorkoutSortOption
 import kotlinx.coroutines.delay
@@ -289,8 +290,9 @@ fun DashboardScreen(
                     .padding(20.dp)
             ) {
                 Text(workout.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                if (workout.author.isNotBlank()) {
-                    Text("By ${workout.author}", fontSize = 13.sp, color = Color.Gray)
+                val authorLabel = WorkoutPresentation.formatAuthor(workout.author)
+                if (authorLabel.isNotBlank()) {
+                    Text(authorLabel, fontSize = 13.sp, color = Color.Gray)
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -1474,8 +1476,9 @@ internal fun WorkoutItemCard(
                         color = Color(0xFFFFB300),
                         fontWeight = FontWeight.SemiBold
                     )
-                    if (header.author.isNotBlank()) {
-                        Text("By ${header.author}", fontSize = 12.sp, color = Color.Gray)
+                    val authorLabel = WorkoutPresentation.formatAuthor(header.author)
+                    if (authorLabel.isNotBlank()) {
+                        Text(authorLabel, fontSize = 12.sp, color = Color.Gray)
                     }
                 }
 

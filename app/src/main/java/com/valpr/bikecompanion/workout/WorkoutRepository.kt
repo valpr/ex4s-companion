@@ -183,7 +183,7 @@ class WorkoutRepository(private val workoutDirectory: File) {
     companion object {
         val SAMPLE_SWEET_SPOT = """
             <workout_file>
-                <author>Echelon Companion</author>
+                <author>Default</author>
                 <name>Sweet Spot Intervals (30 min)</name>
                 <description>A 30-minute high-efficiency workout with two 8-minute intervals at 88% FTP.</description>
                 <sportType>bike</sportType>
@@ -208,7 +208,7 @@ class WorkoutRepository(private val workoutDirectory: File) {
 
         val SAMPLE_RAMP_TEST = """
             <workout_file>
-                <author>Echelon Companion</author>
+                <author>Default</author>
                 <name>FTP Ramp Test</name>
                 <description>Progressive 1-minute steps to exhaustion. 75% of your best 1-minute power is your new FTP.</description>
                 <sportType>bike</sportType>
@@ -240,7 +240,7 @@ class WorkoutRepository(private val workoutDirectory: File) {
         // region Beginner Path (Levels 1-4): short, easy, heavily coached.
         val SAMPLE_BEGINNER_01 = """
             <workout_file>
-                <author>Echelon Companion</author>
+                <author>Default</author>
                 <name>First Pedals (15 min) - Beginner 1/4</name>
                 <description>Your very first ride. Easy spinning while ERG controls the bike, plus a 2-minute shifting practice. If you can talk in full sentences, you are at the right effort.</description>
                 <sportType>bike</sportType>
@@ -268,7 +268,7 @@ class WorkoutRepository(private val workoutDirectory: File) {
 
         val SAMPLE_BEGINNER_02 = """
             <workout_file>
-                <author>Echelon Companion</author>
+                <author>Default</author>
                 <name>Building Rhythm (20 min) - Beginner 2/4</name>
                 <description>Two steady blocks at 55-60% FTP with an easy breather between. Practice holding one rhythm instead of surging.</description>
                 <sportType>bike</sportType>
@@ -299,7 +299,7 @@ class WorkoutRepository(private val workoutDirectory: File) {
 
         val SAMPLE_BEGINNER_03 = """
             <workout_file>
-                <author>Echelon Companion</author>
+                <author>Default</author>
                 <name>Steady Confidence (25 min) - Beginner 3/4</name>
                 <description>Two 6-minute pushes at 65% FTP with full recoveries. Your first taste of repeatable efforts. Back off anytime with The Clutch.</description>
                 <sportType>bike</sportType>
@@ -323,7 +323,7 @@ class WorkoutRepository(private val workoutDirectory: File) {
 
         val SAMPLE_BEGINNER_04 = """
             <workout_file>
-                <author>Echelon Companion</author>
+                <author>Default</author>
                 <name>Ready for More (30 min) - Beginner 4/4</name>
                 <description>Graduation ride: three 5-minute efforts at 65-70% FTP. Finish this strong and you are ready for Sweet Spot Intervals.</description>
                 <sportType>bike</sportType>
@@ -353,7 +353,7 @@ class WorkoutRepository(private val workoutDirectory: File) {
         // warmup/cooldown. Hard types carry Clutch/HR-cap cues and no Beginner tag.
         val SAMPLE_ENDURANCE_30 = """
             <workout_file>
-                <author>Echelon Companion</author>
+                <author>Default</author>
                 <name>Fat Burn Endurance (30 min)</name>
                 <description>Steady Zone 2 at 65% FTP. Conversational pace that builds aerobic base and maximizes fat metabolism. Keep cadence smooth at 85 RPM.</description>
                 <sportType>bike</sportType>
@@ -378,7 +378,7 @@ class WorkoutRepository(private val workoutDirectory: File) {
 
         val SAMPLE_ENDURANCE_60 = """
             <workout_file>
-                <author>Echelon Companion</author>
+                <author>Default</author>
                 <name>Aerobic Base (60 min)</name>
                 <description>A full hour of Zone 2 at 68% FTP. The classic base-builder: easy enough to repeat often, long enough to drive mitochondrial adaptation.</description>
                 <sportType>bike</sportType>
@@ -403,7 +403,7 @@ class WorkoutRepository(private val workoutDirectory: File) {
 
         val SAMPLE_CLIMB_30 = """
             <workout_file>
-                <author>Echelon Companion</author>
+                <author>Default</author>
                 <name>Climb Strength (30 min)</name>
                 <description>Seated climbing strength: 4-minute pushes at 82% FTP and low 70 RPM cadence with easy spin recoveries. Heavy legs, steady breathing.</description>
                 <sportType>bike</sportType>
@@ -427,7 +427,7 @@ class WorkoutRepository(private val workoutDirectory: File) {
 
         val SAMPLE_CLIMB_45 = """
             <workout_file>
-                <author>Echelon Companion</author>
+                <author>Default</author>
                 <name>Climb Strength (45 min)</name>
                 <description>Longer seated climbing: four 5-minute pushes at 85% FTP and 70 RPM. Builds repeatable hill strength for real-world gradients.</description>
                 <sportType>bike</sportType>
@@ -451,7 +451,7 @@ class WorkoutRepository(private val workoutDirectory: File) {
 
         val SAMPLE_HIIT_30 = """
             <workout_file>
-                <author>Echelon Companion</author>
+                <author>Default</author>
                 <name>HIIT Intervals (30 min)</name>
                 <description>Ten rounds of 40 seconds at 115% FTP with 80-second recoveries. Short, sharp, and over in half an hour. The Clutch is there if you need it.</description>
                 <sportType>bike</sportType>
@@ -475,7 +475,7 @@ class WorkoutRepository(private val workoutDirectory: File) {
 
         val SAMPLE_HIIT_45 = """
             <workout_file>
-                <author>Echelon Companion</author>
+                <author>Default</author>
                 <name>HIIT and Hills (45 min)</name>
                 <description>Alternating sprint blocks (40s at 112% FTP) and seated hills (5 min at 85% FTP, 72 RPM). The Peloton-style mixed session.</description>
                 <sportType>bike</sportType>
@@ -511,7 +511,7 @@ class WorkoutRepository(private val workoutDirectory: File) {
 
         val SAMPLE_TABATA_20 = """
             <workout_file>
-                <author>Echelon Companion</author>
+                <author>Default</author>
                 <name>Tabata Intervals (20 min)</name>
                 <description>Classic Tabata: two sets of 8 x 20 seconds all-out at 125% FTP with 10-second rests. Maximum intensity, minimum time.</description>
                 <sportType>bike</sportType>
@@ -541,7 +541,7 @@ class WorkoutRepository(private val workoutDirectory: File) {
 
         val SAMPLE_VO2_30 = """
             <workout_file>
-                <author>Echelon Companion</author>
+                <author>Default</author>
                 <name>VO2 Max 3x3 (30 min)</name>
                 <description>Three 3-minute efforts at 110% FTP with equal recoveries at 95 RPM. Raises your aerobic ceiling. Hard but repeatable weekly.</description>
                 <sportType>bike</sportType>
@@ -565,7 +565,7 @@ class WorkoutRepository(private val workoutDirectory: File) {
 
         val SAMPLE_VO2_45 = """
             <workout_file>
-                <author>Echelon Companion</author>
+                <author>Default</author>
                 <name>VO2 Max 40-20s (45 min)</name>
                 <description>Microburst VO2: three blocks of 5 x 40 seconds at 109% FTP with 20-second floats. More time at max oxygen uptake than long intervals.</description>
                 <sportType>bike</sportType>
@@ -604,7 +604,7 @@ class WorkoutRepository(private val workoutDirectory: File) {
 
         val SAMPLE_RECOVERY_20 = """
             <workout_file>
-                <author>Echelon Companion</author>
+                <author>Default</author>
                 <name>Low Impact Recovery (20 min)</name>
                 <description>All-seated active recovery at 48% FTP and 80 RPM. For rest days or returning after time off. Light on the joints, easy on the mind.</description>
                 <sportType>bike</sportType>

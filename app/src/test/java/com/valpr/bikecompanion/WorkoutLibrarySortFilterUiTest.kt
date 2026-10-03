@@ -121,6 +121,57 @@ class WorkoutLibrarySortFilterUiTest {
     }
 
     @Test
+    fun workoutItemCard_displaysDefaultAuthor_withoutByPrefix() {
+        val header = CachedWorkoutHeader(
+            filename = "sample.zwo",
+            name = "Test Ride",
+            author = "Default",
+            description = "Ride description",
+            durationSeconds = 1800,
+            estimatedTss = 30.0,
+            fileSizeBytes = 500L,
+            lastModifiedMs = 1000L
+        )
+
+        composeRule.setContent {
+            WorkoutItemCard(
+                header = header,
+                onClick = {},
+                onDelete = {}
+            )
+        }
+
+        composeRule.onNodeWithText("Default").assertIsDisplayed()
+        composeRule.onNodeWithText("By Default").assertDoesNotExist()
+        composeRule.onNodeWithText("By Echelon Companion").assertDoesNotExist()
+    }
+
+    @Test
+    fun workoutItemCard_legacyEchelonCompanionAuthor_displaysDefault() {
+        val header = CachedWorkoutHeader(
+            filename = "sample.zwo",
+            name = "Test Ride",
+            author = "Echelon Companion",
+            description = "Ride description",
+            durationSeconds = 1800,
+            estimatedTss = 30.0,
+            fileSizeBytes = 500L,
+            lastModifiedMs = 1000L
+        )
+
+        composeRule.setContent {
+            WorkoutItemCard(
+                header = header,
+                onClick = {},
+                onDelete = {}
+            )
+        }
+
+        composeRule.onNodeWithText("Default").assertIsDisplayed()
+        composeRule.onNodeWithText("By Echelon Companion").assertDoesNotExist()
+    }
+
+    @Test
     fun workoutLibraryHeader_searchField_updatesQuery_andClearsQuery() {
         var query by mutableStateOf("")
 

@@ -255,7 +255,7 @@ class WorkoutEditorState(val repository: WorkoutRepository) {
 
     var name by mutableStateOf("")
         private set
-    var author by mutableStateOf("Echelon Companion")
+    var author by mutableStateOf("Default")
         private set
     var description by mutableStateOf("")
         private set
@@ -283,7 +283,7 @@ class WorkoutEditorState(val repository: WorkoutRepository) {
     fun loadNew() {
         originalFilename = null
         name = ""
-        author = "Echelon Companion"
+        author = "Default"
         description = ""
         tagsText = ""
         segments.clear()
@@ -298,7 +298,7 @@ class WorkoutEditorState(val repository: WorkoutRepository) {
         val cues = ZwoWriter.distributeCues(workout)
         originalFilename = filename
         name = workout.name
-        author = workout.author
+        author = if (workout.author.equals("Echelon Companion", ignoreCase = true)) "Default" else workout.author
         description = workout.description
         tagsText = workout.tags.joinToString(", ")
         segments.clear()

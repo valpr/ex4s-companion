@@ -334,6 +334,26 @@ class WorkoutFilterSortTest {
         )
         assertEquals(1, multiToken.size)
         assertEquals("endurance_60.zwo", multiToken[0].filename)
+
+        // Matches formatted author "Default" for legacy "Echelon Companion"
+        val legacyDefault = listOf(
+            CachedWorkoutHeader(
+                filename = "legacy.zwo",
+                name = "Legacy Ride",
+                author = "Echelon Companion",
+                description = "Legacy test",
+                durationSeconds = 1800,
+                estimatedTss = 30.0,
+                fileSizeBytes = 500L,
+                lastModifiedMs = 1000L
+            )
+        )
+        val defaultSearch = WorkoutFilterSortHelper.filterAndSort(
+            legacyDefault,
+            searchQuery = "default"
+        )
+        assertEquals(1, defaultSearch.size)
+        assertEquals("legacy.zwo", defaultSearch[0].filename)
     }
 
     @Test
