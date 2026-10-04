@@ -202,3 +202,28 @@ This document contains mandatory guidelines, invariants, and hard-learned lesson
   * Same principle for representation switches (`changeSegmentType`): carry `restCues` (merge into work cues when the target has no rest slot) rather than dropping user data.
 * **Dialog flags tied to ViewModel state must be `rememberSaveable`:**
   * When the condition being confirmed (e.g. `pendingOverwriteFilename`) lives in the rotation-proof ViewModel but visibility is local `remember`, rotation strands the state with no dialog. Persist visibility or derive it from the ViewModel state.
+
+---
+
+## 11. Hardware Abstraction & Companion Invariants
+* **Strict Package Import Boundaries:**
+  * Only `bike.api` and `companion.api` types may cross the boundary into UI, ViewModels, and `WorkoutSessionManager`.
+  * Concrete drivers (`bike.echelon`, `bike.ftms`), GATT implementations (`bike.ble`), and wearable transports (`wearable`, Play Services Wearable) must remain internal to their packages.
+  * Verified continuously by `ImportBoundaryTest`.
+* **Capability-Driven Resistance & ERG:**
+  * Resistance ranges must never be hardcoded (`1..32`). Always derive bounds, sliders, and stepper clamps from `BikeCapabilities.resistanceRange`.
+  * On bikes supporting native ERG (`capabilities.supportsNativeErg == true`), `WorkoutSessionManager` retains safety authority:
+    * It commands target power (`onSetTargetPower`) rather than running local resistance PI trim.
+    * Emergency bailouts (manual Clutch or cadence floor drop) unconditionally dispatch `RECOVERY_WATTS` (50W) on entry transition (§1 bypass).
+    * Critical HR derating modulates commanded power by 10% (90% target).
+* **Heart Rate Freshness & Centralized Arbiter Authority:**
+  * `HeartRateArbiter` exclusively owns source priority and sample freshness watchdogging.
+  * The session must never latch stale HR: when a source drops or disconnects, the arbiter invokes `clearHeartRate()`, resetting BPM to 0 and releasing any active HR cap.
+* **Companion Hub Command Deduplication:**
+  * `CompanionHub` debounces remote commands (e.g. 500ms clutch debounce) to prevent double-execution from redundant transports, but must **never** suppress the first command entry.
+* **Transport Battery & Throttling Discipline for All Providers:**
+  * Any new companion provider or HR source must conform to the low-power rules in §5:
+    * Throttle steady-state telemetry to ~0.5Hz / 2s.
+    * Burst immediately on state, bailout, cadence-floor, target-watt, or HR-cap changes.
+    * Gate sensor reading exclusively on `RUNNING` or `PAUSED` session states.
+
