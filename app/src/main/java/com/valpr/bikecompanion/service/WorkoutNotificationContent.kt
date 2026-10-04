@@ -16,17 +16,18 @@ object WorkoutNotificationContent {
 
     fun buildTitle(session: WorkoutSessionState, connState: BleConnectionState): String {
         val telem = session.latestTelemetry
+        val watts = session.displayWattsOrRaw
         return when {
             session.status == SessionStatus.RUNNING -> {
                 val workoutName = session.workout?.name ?: "Free Ride"
                 val targetStr = session.targetWatts?.let { " (Target ${it}W)" } ?: ""
-                "$workoutName: ${telem.estimatedWatts}W$targetStr"
+                "$workoutName: ${watts}W$targetStr"
             }
             session.status == SessionStatus.PAUSED -> {
-                "Workout Paused: ${telem.estimatedWatts}W | ${telem.cadenceRpm} RPM"
+                "Workout Paused: ${watts}W | ${telem.cadenceRpm} RPM"
             }
             connState is BleConnectionState.Connected -> {
-                "EX-4S Connected: ${telem.estimatedWatts}W | ${telem.cadenceRpm} RPM"
+                "EX-4S Connected: ${watts}W | ${telem.cadenceRpm} RPM"
             }
             connState is BleConnectionState.Connecting ->
                 "Connecting to ${connState.deviceName}..."

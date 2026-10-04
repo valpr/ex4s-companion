@@ -150,7 +150,7 @@ class CompanionHub(
                 status = state.status,
                 elapsedSeconds = state.elapsedSeconds,
                 totalSeconds = state.totalSeconds,
-                currentWatts = telem.estimatedWatts,
+                currentWatts = state.displayWattsOrRaw,
                 targetWatts = state.targetWatts,
                 cadenceRpm = telem.cadenceRpm,
                 targetCadenceRpm = state.targetCadence,

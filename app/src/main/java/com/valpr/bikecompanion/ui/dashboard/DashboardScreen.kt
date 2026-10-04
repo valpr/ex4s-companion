@@ -477,11 +477,11 @@ fun DashboardScreen(
                 }
             }
 
-            // 1. Connection Status Banner
+            // 1. Connection Status Banner (display-smoothed watts)
             item {
                 BikeConnectionCard(
                     state = bleState,
-                    telemetryWatts = telemetry.estimatedWatts,
+                    telemetryWatts = sessionState.displayWattsOrRaw,
                     telemetryCadence = telemetry.cadenceRpm,
                     onConnectClick = {
                         showScanDialog = true
@@ -1595,7 +1595,7 @@ internal fun ActiveWorkoutCard(sessionState: WorkoutSessionState, onResume: () -
 
             val targetText = sessionState.targetWatts?.let { " • Target: ${it}W" } ?: ""
             Text(
-                "${telem.estimatedWatts}W • ${telem.cadenceRpm} RPM • L${telem.resistanceLevel}$targetText",
+                "${sessionState.displayWattsOrRaw}W • ${telem.cadenceRpm} RPM • L${telem.resistanceLevel}$targetText",
                 fontSize = 13.sp,
                 color = Color(0xFFB0BEC5)
             )

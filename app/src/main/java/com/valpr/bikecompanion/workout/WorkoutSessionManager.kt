@@ -11,6 +11,7 @@ import com.valpr.bikecompanion.engine.ErgController
 import com.valpr.bikecompanion.engine.ErgDecision
 import com.valpr.bikecompanion.engine.ErgState
 import com.valpr.bikecompanion.shared.HapticAlertType
+import com.valpr.bikecompanion.shared.PowerSmoother
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -77,6 +78,13 @@ data class WorkoutSessionState(
     val activeCues: List<WorkoutTextEvent> = emptyList(),
     val currentPosition: SegmentPosition? = null,
     val latestTelemetry: BikeTelemetry = BikeTelemetry(),
+    /**
+     * Display-only smoothed power (3-sample rolling average, Zwift convention).
+     * Recording ([WorkoutMetricSample.watts], summaries) and the ERG control loop
+     * keep using raw [BikeTelemetry.estimatedWatts]; this field feeds tiles,
+     * notifications, and watch snapshots so gear/intensity shifts don't flicker.
+     */
+    val displayWatts: Int = 0,
     val currentHeartRate: Int = 0,
     val isCriticalHrActive: Boolean = false,
     val athleteMaxHr: Int = 190,
@@ -87,6 +95,14 @@ data class WorkoutSessionState(
     val summary: WorkoutSummary? = null
 ) {
     val isFreeRide: Boolean get() = workout == null
+
+    /**
+     * Smoothed readout with raw fallback: manually-constructed states (tests,
+     * previews) default [displayWatts] to 0, so fall back to raw telemetry
+     * instead of showing 0W. Production states always carry a live smoothed
+     * value once the first telemetry tick lands.
+     */
+    val displayWattsOrRaw: Int get() = if (displayWatts > 0) displayWatts else latestTelemetry.estimatedWatts
     val progress: Float
         get() = if (totalSeconds > 0) (elapsedSeconds.toFloat() / totalSeconds).coerceIn(0f, 1f) else 0f
     val formattedElapsedTime: String
@@ -115,7 +131,8 @@ class WorkoutSessionManager(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val isBikeConnected: () -> Boolean = { true },
     capabilitiesFlow: StateFlow<BikeCapabilities> = MutableStateFlow(BikeCapabilities.DEFAULT_ECHELON),
-    private val onSetTargetPower: ((Int) -> Unit)? = null
+    private val onSetTargetPower: ((Int) -> Unit)? = null,
+    private val powerSmoother: PowerSmoother = PowerSmoother()
 ) : WorkoutControlPort {
     constructor(
         bike: BikeController,
@@ -161,10 +178,13 @@ class WorkoutSessionManager(
         get() = athleteFtpConfigured
 
     init {
-        // Observe live telemetry from bike
+        // Observe live telemetry from bike, maintaining the display-only
+        // smoothed power alongside raw telemetry (raw stays authoritative for
+        // recording and ERG control).
         scope.launch {
             telemetryFlow.collect { telemetry ->
-                _sessionState.update { it.copy(latestTelemetry = telemetry) }
+                val smoothed = powerSmoother.update(telemetry.estimatedWatts)
+                _sessionState.update { it.copy(latestTelemetry = telemetry, displayWatts = smoothed) }
             }
         }
 
@@ -283,6 +303,7 @@ class WorkoutSessionManager(
         stopSessionLoop()
         recordedSamples.clear()
         ergController.reset()
+        powerSmoother.reset()
         sessionStartEpochMs = System.currentTimeMillis()
         pauseOdometerSnapshotKm = 0.0
         pausedDistanceKm = 0.0
@@ -307,6 +328,7 @@ class WorkoutSessionManager(
                 totalSeconds = totalDuration,
                 intensityScale = 1.0f,
                 latestTelemetry = it.latestTelemetry,
+                displayWatts = powerSmoother.value,
                 currentHeartRate = it.currentHeartRate,
                 isCriticalHrActive = reEvaluatedCritical,
                 athleteMaxHr = it.athleteMaxHr,
@@ -421,9 +443,11 @@ class WorkoutSessionManager(
         stopSessionLoop()
         pauseOdometerSnapshotKm = 0.0
         pausedDistanceKm = 0.0
+        powerSmoother.reset()
         _sessionState.update {
             WorkoutSessionState(
                 latestTelemetry = it.latestTelemetry,
+                displayWatts = 0,
                 currentHeartRate = it.currentHeartRate,
                 athleteMaxHr = it.athleteMaxHr,
                 athleteRestingHr = it.athleteRestingHr,

@@ -468,10 +468,10 @@ private fun TheBigThree(state: WorkoutSessionState, watchState: WearableWatchSta
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // 1. Live Power
+        // 1. Live Power (display-smoothed; recording stays raw)
         BigMetricTile(
             label = "POWER",
-            value = "${telem.estimatedWatts}",
+            value = "${state.displayWattsOrRaw}",
             unit = "W",
             target = targetWatts?.let { "TARGET ${it}W" },
             accentColor = Color(0xFF00E676),
@@ -620,7 +620,7 @@ private fun BigMetricTile(
 @Composable
 private fun TargetVsActualBar(state: WorkoutSessionState) {
     val target = state.targetWatts ?: return
-    val actual = state.latestTelemetry.estimatedWatts
+    val actual = state.displayWattsOrRaw
     val diff = actual - target
 
     val barColor = when {

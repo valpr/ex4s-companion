@@ -51,13 +51,13 @@ fun PipWorkoutContent(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Power
+                // Power (display-smoothed; recording stays raw)
                 Row(
                     verticalAlignment = Alignment.Bottom,
                     modifier = Modifier.testTag("pip_power")
                 ) {
                     Text(
-                        text = "${telem.estimatedWatts}",
+                        text = "${state.displayWattsOrRaw}",
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = FontFamily.Monospace,
@@ -199,7 +199,7 @@ fun PipWorkoutContent(
                     statusColor = Color(0xFFFF1744)
                 } else if (state.targetWatts != null && !isManual) {
                     val target = state.targetWatts
-                    val actual = telem.estimatedWatts
+                    val actual = state.displayWattsOrRaw
                     val diff = actual - target
                     val diffStr = if (diff >= 0) "+${diff}W" else "${diff}W"
                     statusText = "TARGET ${target}W ($diffStr)"

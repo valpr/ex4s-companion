@@ -64,6 +64,17 @@ class WorkoutNotificationContentTest {
     }
 
     @Test
+    fun running_prefersSmoothedDisplayWatts_overRawTelemetry() {
+        val base = session(SessionStatus.RUNNING, "Sweet Spot", 180, watts = 200)
+        val smoothed = base.copy(displayWatts = 183)
+        val title = WorkoutNotificationContent.buildTitle(
+            smoothed,
+            BleConnectionState.Connected("EX-4S", "AA:BB")
+        )
+        assertEquals("Sweet Spot: 183W (Target 180W)", title)
+    }
+
+    @Test
     fun running_freeRide_noTargetSuffix() {
         val title = WorkoutNotificationContent.buildTitle(
             session(SessionStatus.RUNNING, null, null, watts = 120),

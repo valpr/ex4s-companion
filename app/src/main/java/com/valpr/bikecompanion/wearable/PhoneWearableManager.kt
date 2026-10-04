@@ -638,7 +638,7 @@ class PhoneWearableManager(
                     sessionStatus = statusCode,
                     elapsedSeconds = session.elapsedSeconds,
                     targetWatts = targetWatts,
-                    currentWatts = session.latestTelemetry.estimatedWatts,
+                    currentWatts = session.displayWattsOrRaw,
                     cadenceRpm = session.latestTelemetry.cadenceRpm,
                     heartRateBpm = session.currentHeartRate,
                     isBailoutActive = isBailout,
