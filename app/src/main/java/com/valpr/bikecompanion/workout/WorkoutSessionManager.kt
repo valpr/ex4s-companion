@@ -2,6 +2,7 @@ package com.valpr.bikecompanion.workout
 
 import com.valpr.bikecompanion.bike.api.BikeCapabilities
 import com.valpr.bikecompanion.bike.api.BikeController
+import com.valpr.bikecompanion.companion.api.WorkoutControlPort
 import com.valpr.bikecompanion.data.BikeTelemetry
 import com.valpr.bikecompanion.data.BleConnectionState
 import com.valpr.bikecompanion.data.UserProfile
@@ -114,7 +115,7 @@ class WorkoutSessionManager(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val isBikeConnected: () -> Boolean = { true },
     capabilitiesFlow: StateFlow<BikeCapabilities> = MutableStateFlow(BikeCapabilities.DEFAULT_ECHELON)
-) {
+) : WorkoutControlPort {
     constructor(
         bike: BikeController,
         userProfileRepository: UserProfileRepository,
@@ -319,7 +320,7 @@ class WorkoutSessionManager(
         return Result.success(Unit)
     }
 
-    fun pauseWorkout() {
+    override fun pauseWorkout() {
         if (_sessionState.value.status == SessionStatus.RUNNING) {
             // Snapshot the bike odometer so pedaling during the pause can be
             // excluded from the summary distance (elapsed/samples already freeze).
@@ -328,7 +329,7 @@ class WorkoutSessionManager(
         }
     }
 
-    fun resumeWorkout() {
+    override fun resumeWorkout() {
         if (_sessionState.value.status == SessionStatus.PAUSED) {
             // Accumulate odometer drift while paused; multiple pause/resume
             // cycles sum. Negative drift (odometer reset) is ignored.
@@ -353,7 +354,7 @@ class WorkoutSessionManager(
      * Resumes ERG mode from manual or cadence floor bailout.
      * Invariant: Actuate instantly with dtSeconds = 0.0 to prevent delay.
      */
-    fun resumeManually() {
+    override fun resumeManually() {
         if (ergController.state == ErgState.MANUAL_BAILOUT || ergController.state == ErgState.CADENCE_FLOOR_BAILOUT) {
             ergController.resumeManually()
             if (_sessionState.value.workout != null) {
@@ -379,7 +380,7 @@ class WorkoutSessionManager(
         }
     }
 
-    fun toggleClutch() {
+    override fun toggleClutch() {
         if (ergController.state == ErgState.MANUAL_BAILOUT || ergController.state == ErgState.CADENCE_FLOOR_BAILOUT) {
             resumeManually()
         } else {
@@ -392,13 +393,13 @@ class WorkoutSessionManager(
         }
     }
 
-    fun adjustIntensity(delta: Float) {
+    override fun adjustIntensity(delta: Float) {
         val rawPercent = ((_sessionState.value.intensityScale + delta) * 100).roundToInt()
         val newScale = (rawPercent / 100f).coerceIn(0.50f, 1.50f)
         _sessionState.update { it.copy(intensityScale = newScale) }
     }
 
-    fun stopWorkout() {
+    override fun stopWorkout() {
         val currentState = _sessionState.value
         if (currentState.status == SessionStatus.IDLE || currentState.status == SessionStatus.COMPLETED) {
             return

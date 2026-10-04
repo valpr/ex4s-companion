@@ -40,4 +40,38 @@ class ImportBoundaryTest {
             violations.isEmpty()
         )
     }
+
+    @Test
+    fun companionApi_doesNotImportWearOsOrPlayServices() {
+        val rootDir = File("src/main/java/com/valpr/bikecompanion/companion/api")
+        assertTrue("companion/api directory must exist", rootDir.exists() && rootDir.isDirectory)
+
+        val bannedPrefixes = listOf(
+            "com.valpr.bikecompanion.wearable",
+            "com.google.android.gms.wearable",
+            "androidx.wear"
+        )
+
+        val violations = mutableListOf<String>()
+        rootDir.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { file ->
+            file.useLines { lines ->
+                lines.forEachIndexed { index, line ->
+                    val trimmed = line.trim()
+                    if (trimmed.startsWith("import ")) {
+                        val imported = trimmed.removePrefix("import ").trim()
+                        for (banned in bannedPrefixes) {
+                            if (imported.startsWith(banned)) {
+                                violations.add("${file.name}:${index + 1} imports $imported")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        assertTrue(
+            "Found architectural boundary violations in companion/api:\n${violations.joinToString("\n")}",
+            violations.isEmpty()
+        )
+    }
 }
