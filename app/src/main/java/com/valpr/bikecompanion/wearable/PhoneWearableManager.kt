@@ -9,7 +9,17 @@ import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Node
 import com.google.android.gms.wearable.NodeClient
 import com.google.android.gms.wearable.Wearable
+import com.valpr.bikecompanion.companion.api.CompanionCapability
+import com.valpr.bikecompanion.companion.api.CompanionDeviceProvider
+import com.valpr.bikecompanion.companion.api.CompanionHub
+import com.valpr.bikecompanion.companion.api.DeviceLinkState
+import com.valpr.bikecompanion.companion.api.HeartRateSource
+import com.valpr.bikecompanion.companion.api.HrSample
+import com.valpr.bikecompanion.companion.api.HrStatus
+import com.valpr.bikecompanion.companion.api.RemoteCommand
+import com.valpr.bikecompanion.companion.api.RemoteWorkoutSnapshot
 import com.valpr.bikecompanion.engine.ErgState
+import com.valpr.bikecompanion.shared.HapticAlertType
 import com.valpr.bikecompanion.shared.PingPongMessage
 import com.valpr.bikecompanion.shared.WearableProtocol
 import com.valpr.bikecompanion.shared.WorkoutStateMessage
@@ -22,8 +32,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -72,13 +85,16 @@ enum class WatchHrStatus {
  */
 class PhoneWearableManager(
     private val context: Context,
-    private val sessionManager: WorkoutSessionManager,
+    private val sessionManager: WorkoutSessionManager? = null,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     messageClientOverride: MessageClient? = null,
     nodeClientOverride: NodeClient? = null,
     capabilityClientOverride: CapabilityClient? = null,
-    private val clock: () -> Long = System::currentTimeMillis
-) : MessageClient.OnMessageReceivedListener,
+    private val clock: () -> Long = System::currentTimeMillis,
+    private val enableDirectSync: Boolean = (sessionManager != null)
+) : CompanionDeviceProvider,
+    HeartRateSource,
+    MessageClient.OnMessageReceivedListener,
     CapabilityClient.OnCapabilityChangedListener {
 
     companion object {
@@ -112,6 +128,29 @@ class PhoneWearableManager(
         }
     }
 
+    override val id: String = "wear_os"
+    override val displayName: String
+        get() = _watchState.value.nodeName.ifBlank { "Wear OS (Pixel Watch)" }
+
+    private val _linkState = MutableStateFlow(DeviceLinkState.DISCONNECTED)
+    override val linkState: StateFlow<DeviceLinkState> = _linkState.asStateFlow()
+
+    override val capabilities: Set<CompanionCapability> = setOf(
+        CompanionCapability.HEART_RATE,
+        CompanionCapability.WORKOUT_MIRROR,
+        CompanionCapability.ROTARY_INPUT,
+        CompanionCapability.HAPTIC_FEEDBACK
+    )
+
+    private val _remoteCommands = MutableSharedFlow<RemoteCommand>(extraBufferCapacity = 16)
+    override val remoteCommands: SharedFlow<RemoteCommand> = _remoteCommands.asSharedFlow()
+
+    private val _hrSample = MutableStateFlow<HrSample?>(null)
+    override val hrSample: StateFlow<HrSample?> = _hrSample.asStateFlow()
+
+    private val _hrStatus = MutableStateFlow(HrStatus.DISCONNECTED)
+    override val hrStatus: StateFlow<HrStatus> = _hrStatus.asStateFlow()
+
     private val messageClient: MessageClient by lazy {
         messageClientOverride ?: Wearable.getMessageClient(context)
     }
@@ -143,8 +182,10 @@ class PhoneWearableManager(
         }
 
         refreshConnectedNodes()
-        startWorkoutStateSync()
-        startHapticAlertSync()
+        if (enableDirectSync && sessionManager != null) {
+            startWorkoutStateSync()
+            startHapticAlertSync()
+        }
     }
 
     /**
@@ -161,9 +202,14 @@ class PhoneWearableManager(
                 nodeId = node.id
             )
         }
+        _linkState.value = DeviceLinkState.CONNECTED
+        if (_hrStatus.value == HrStatus.DISCONNECTED) {
+            _hrStatus.value = HrStatus.CONNECTING
+        }
         Log.d(TAG, "Watch node updated: ${node.displayName} (${node.id}), isAppInstalled=$isAppInstalled")
-        if ((!wasConnected || prevNodeId != node.id) &&
-            sessionManager.sessionState.value.status != SessionStatus.IDLE &&
+        if (enableDirectSync &&
+            (!wasConnected || prevNodeId != node.id) &&
+            sessionManager?.sessionState?.value?.status != SessionStatus.IDLE &&
             isAppInstalled
         ) {
             sendCurrentWorkoutState(node.id)
@@ -208,9 +254,12 @@ class PhoneWearableManager(
                             nodeId = ""
                         )
                     }
+                    _linkState.value = DeviceLinkState.DISCONNECTED
+                    _hrStatus.value = HrStatus.DISCONNECTED
+                    _hrSample.value = null
                     if (wasConnected) {
                         hrWatchdogJob?.cancel()
-                        sessionManager.clearHeartRate()
+                        sessionManager?.clearHeartRate()
                     }
                     Log.d(TAG, "No connected watch nodes found.")
                 }
@@ -229,8 +278,11 @@ class PhoneWearableManager(
         Log.i(TAG, "Watch peer disconnected: ${peer.displayName} (${peer.id})")
         if (_watchState.value.nodeId == peer.id) {
             _watchState.update { it.copy(isConnected = false) }
+            _linkState.value = DeviceLinkState.DISCONNECTED
+            _hrStatus.value = HrStatus.DISCONNECTED
+            _hrSample.value = null
             hrWatchdogJob?.cancel()
-            sessionManager.clearHeartRate()
+            sessionManager?.clearHeartRate()
         }
         refreshConnectedNodes()
     }
@@ -246,20 +298,28 @@ class PhoneWearableManager(
                     nodeName = it.nodeName.ifBlank { "Pixel Watch" }
                 )
             }
+            _linkState.value = DeviceLinkState.CONNECTED
+            if (_hrStatus.value == HrStatus.DISCONNECTED) {
+                _hrStatus.value = HrStatus.CONNECTING
+            }
         }
 
         when (val action = PhoneWearableRouter.route(messageEvent.path, messageEvent.data)) {
             is PhoneWearableRouter.Action.ForwardHeartRate -> {
-                // Stamp phone receipt time (clock, not the watch batch timestamp)
-                // so freshness is immune to watch/phone clock skew.
+                val now = clock()
                 _watchState.update {
                     it.copy(
                         lastHeartRateBpm = action.bpm,
-                        lastHeartRateTimestampMs = clock()
+                        lastHeartRateTimestampMs = now
                     )
                 }
-                // Forward to WorkoutSessionManager for dynamic capping and UI
-                sessionManager.updateHeartRate(action.bpm)
+                _hrSample.value = HrSample(
+                    bpm = action.bpm,
+                    timestampEpochMs = now,
+                    deviceName = _watchState.value.nodeName.ifBlank { "Pixel Watch" }
+                )
+                _hrStatus.value = HrStatus.CONNECTED
+                sessionManager?.updateHeartRate(action.bpm)
                 resetHrWatchdog()
             }
 
@@ -271,28 +331,34 @@ class PhoneWearableManager(
                 }
                 lastClutchMs = now
                 Log.i(TAG, "Received Rotary Crown Bailout command from watch")
-                sessionManager.toggleClutch()
+                _remoteCommands.tryEmit(RemoteCommand.ToggleClutch)
+                sessionManager?.toggleClutch()
             }
 
             PhoneWearableRouter.Action.Resume -> {
                 Log.i(TAG, "Received Resume Slap tap command from watch")
-                // Session pause and ERG bailout are orthogonal axes: a slap
-                // while PAUSED unfreezes the playhead, and independently clears
-                // any ERG bailout. Either or both may apply.
-                if (sessionManager.sessionState.value.status == SessionStatus.PAUSED) {
-                    sessionManager.resumeWorkout()
+                _remoteCommands.tryEmit(RemoteCommand.Resume)
+                _remoteCommands.tryEmit(RemoteCommand.ResumeManually)
+                sessionManager?.let { sm ->
+                    if (sm.sessionState.value.status == SessionStatus.PAUSED) {
+                        sm.resumeWorkout()
+                    }
+                    sm.resumeManually()
                 }
-                sessionManager.resumeManually()
             }
 
             PhoneWearableRouter.Action.Pause -> {
                 Log.i(TAG, "Received Pause command from watch")
-                sessionManager.pauseWorkout()
+                _remoteCommands.tryEmit(RemoteCommand.Pause)
+                sessionManager?.pauseWorkout()
             }
 
             PhoneWearableRouter.Action.RequestWorkoutState -> {
                 Log.i(TAG, "Received RequestWorkoutState from watch ($sourceNodeId)")
-                sendCurrentWorkoutState(sourceNodeId.ifBlank { null })
+                _remoteCommands.tryEmit(RemoteCommand.RequestSync)
+                if (sessionManager != null) {
+                    sendCurrentWorkoutState(sourceNodeId.ifBlank { null })
+                }
             }
 
             is PhoneWearableRouter.Action.Pong -> {
@@ -446,6 +512,65 @@ class PhoneWearableManager(
         }
     }
 
+    override suspend fun sendSnapshot(snapshot: RemoteWorkoutSnapshot) {
+        val targetNodeId = _watchState.value.nodeId
+        if (targetNodeId.isBlank()) return
+
+        val statusCode = when (snapshot.status) {
+            SessionStatus.IDLE -> WorkoutStateMessage.STATUS_IDLE
+            SessionStatus.RUNNING -> WorkoutStateMessage.STATUS_RUNNING
+            SessionStatus.PAUSED -> WorkoutStateMessage.STATUS_PAUSED
+            SessionStatus.COMPLETED -> WorkoutStateMessage.STATUS_COMPLETED
+        }
+
+        val message = WorkoutStateMessage(
+            sessionStatus = statusCode,
+            elapsedSeconds = snapshot.elapsedSeconds,
+            targetWatts = snapshot.targetWatts ?: -1,
+            currentWatts = snapshot.currentWatts,
+            cadenceRpm = snapshot.cadenceRpm,
+            heartRateBpm = snapshot.heartRateBpm ?: 0,
+            isBailoutActive = snapshot.isBailoutActive,
+            isCadenceFloorActive = snapshot.isCadenceFloorActive,
+            isHrCapped = snapshot.isHrCapped,
+            workoutName = snapshot.workoutName,
+            athleteMaxHr = snapshot.athleteMaxHr,
+            athleteRestingHr = snapshot.athleteRestingHr,
+            useKarvonenZones = snapshot.useKarvonenZones
+        )
+
+        try {
+            Tasks.await(
+                messageClient.sendMessage(
+                    targetNodeId,
+                    WearableProtocol.PATH_WORKOUT_STATE,
+                    message.toByteArray()
+                )
+            )
+            Log.d(TAG, "Dispatched workout snapshot to watch ($targetNodeId): status=$statusCode, name=${message.workoutName}")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to send workout snapshot to watch: ${e.message}")
+        }
+    }
+
+    override suspend fun triggerHaptic(type: HapticAlertType) {
+        val targetNodeId = _watchState.value.nodeId
+        if (targetNodeId.isBlank()) return
+
+        try {
+            Tasks.await(
+                messageClient.sendMessage(
+                    targetNodeId,
+                    WearableProtocol.PATH_HAPTIC_TRIGGER,
+                    type.toByteArray()
+                )
+            )
+            Log.d(TAG, "Dispatched haptic alert $type to watch $targetNodeId")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to send haptic alert: ${e.message}")
+        }
+    }
+
     /**
      * Immediately dispatches the current workout state to the specified watch node or active node.
      */
@@ -453,50 +578,10 @@ class PhoneWearableManager(
         val targetNodeId = targetNodeIdOverride ?: _watchState.value.nodeId
         if (targetNodeId.isBlank()) return
 
+        val session = sessionManager?.sessionState?.value ?: return
+        val snapshot = CompanionHub.toSnapshot(session)
         scope.launch {
-            val session = sessionManager.sessionState.value
-            val statusCode = when (session.status) {
-                SessionStatus.IDLE -> WorkoutStateMessage.STATUS_IDLE
-                SessionStatus.RUNNING -> WorkoutStateMessage.STATUS_RUNNING
-                SessionStatus.PAUSED -> WorkoutStateMessage.STATUS_PAUSED
-                SessionStatus.COMPLETED -> WorkoutStateMessage.STATUS_COMPLETED
-            }
-
-            val ergState = session.ergDecision?.state
-            val isBailout = ergState == ErgState.MANUAL_BAILOUT
-            val isCadenceFloor = ergState == ErgState.CADENCE_FLOOR_BAILOUT
-            val isHrCapped = session.ergDecision?.isHrCapped == true || session.isCriticalHrActive
-            val targetWatts = session.targetWatts ?: -1
-
-            val message = WorkoutStateMessage(
-                sessionStatus = statusCode,
-                elapsedSeconds = session.elapsedSeconds,
-                targetWatts = targetWatts,
-                currentWatts = session.latestTelemetry.estimatedWatts,
-                cadenceRpm = session.latestTelemetry.cadenceRpm,
-                heartRateBpm = session.currentHeartRate,
-                isBailoutActive = isBailout,
-                isCadenceFloorActive = isCadenceFloor,
-                isHrCapped = isHrCapped,
-                workoutName = session.workout?.name
-                    ?: if (session.isFreeRide && session.status != SessionStatus.IDLE) "Free Ride" else "",
-                athleteMaxHr = session.athleteMaxHr,
-                athleteRestingHr = session.athleteRestingHr,
-                useKarvonenZones = session.useKarvonenZones
-            )
-
-            try {
-                Tasks.await(
-                    messageClient.sendMessage(
-                        targetNodeId,
-                        WearableProtocol.PATH_WORKOUT_STATE,
-                        message.toByteArray()
-                    )
-                )
-                Log.d(TAG, "Dispatched workout state to watch ($targetNodeId): status=$statusCode, name=${message.workoutName}")
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to send workout state to watch: ${e.message}")
-            }
+            sendSnapshot(snapshot)
         }
     }
 
@@ -507,10 +592,11 @@ class PhoneWearableManager(
      */
     private fun startWorkoutStateSync() {
         stateSyncJob?.cancel()
+        val sm = sessionManager ?: return
         stateSyncJob = scope.launch {
             var lastSentMs = 0L
             var lastKeys: WearSyncKeys? = null
-            sessionManager.sessionState.collect { session ->
+            sm.sessionState.collect { session ->
                 val targetNodeId = _watchState.value.nodeId
 
                 val statusCode = when (session.status) {
@@ -588,8 +674,9 @@ class PhoneWearableManager(
      */
     private fun startHapticAlertSync() {
         hapticJob?.cancel()
+        val sm = sessionManager ?: return
         hapticJob = scope.launch {
-            sessionManager.hapticAlerts.collect { alert ->
+            sm.hapticAlerts.collect { alert ->
                 val targetNodeId = _watchState.value.nodeId
                 if (targetNodeId.isBlank()) return@collect
 
@@ -613,7 +700,9 @@ class PhoneWearableManager(
         hrWatchdogJob?.cancel()
         hrWatchdogJob = scope.launch {
             delay(HR_STALE_THRESHOLD_MS)
-            sessionManager.clearHeartRate()
+            _hrStatus.value = if (_watchState.value.isConnected) HrStatus.STALE else HrStatus.DISCONNECTED
+            _hrSample.value = null
+            sessionManager?.clearHeartRate()
         }
     }
 

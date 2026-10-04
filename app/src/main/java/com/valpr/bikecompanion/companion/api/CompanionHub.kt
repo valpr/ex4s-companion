@@ -42,6 +42,15 @@ class CompanionHub(
                 }
             }
             providerJobs.add(job)
+
+            val linkJob = scope.launch {
+                provider.linkState.collect { linkState ->
+                    if (linkState == DeviceLinkState.CONNECTED && sessionState.value.status != com.valpr.bikecompanion.workout.SessionStatus.IDLE) {
+                        syncState(sessionState.value, force = true)
+                    }
+                }
+            }
+            providerJobs.add(linkJob)
         }
 
         // Fan out haptic alerts
@@ -69,7 +78,7 @@ class CompanionHub(
         )
     }
 
-    private fun dispatchRemoteCommand(command: RemoteCommand) {
+    private suspend fun dispatchRemoteCommand(command: RemoteCommand) {
         when (command) {
             RemoteCommand.ToggleClutch -> workoutControl.toggleClutch()
             RemoteCommand.ResumeManually -> workoutControl.resumeManually()
@@ -77,10 +86,11 @@ class CompanionHub(
             RemoteCommand.Pause -> workoutControl.pauseWorkout()
             RemoteCommand.Resume -> workoutControl.resumeWorkout()
             RemoteCommand.Stop -> workoutControl.stopWorkout()
+            RemoteCommand.RequestSync -> syncState(sessionState.value, force = true)
         }
     }
 
-    private suspend fun syncState(state: WorkoutSessionState) {
+    private suspend fun syncState(state: WorkoutSessionState, force: Boolean = false) {
         val connectedProviders = providers.filter {
             it.capabilities.contains(CompanionCapability.WORKOUT_MIRROR) &&
                 it.linkState.value == DeviceLinkState.CONNECTED
@@ -91,7 +101,7 @@ class CompanionHub(
 
         val snapshot = toSnapshot(state)
         val now = clock()
-        val isTransition = shouldBurst(snapshot, lastSnapshot)
+        val isTransition = force || shouldBurst(snapshot, lastSnapshot)
 
         if (isTransition || (now - lastSentMs) >= throttleWindowMs) {
             lastSentMs = now

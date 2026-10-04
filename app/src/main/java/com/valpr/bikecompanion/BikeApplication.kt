@@ -42,6 +42,12 @@ class BikeApplication : Application() {
     lateinit var phoneWearableManager: PhoneWearableManager
         private set
 
+    lateinit var heartRateArbiter: com.valpr.bikecompanion.companion.api.HeartRateArbiter
+        private set
+
+    lateinit var companionHub: com.valpr.bikecompanion.companion.api.CompanionHub
+        private set
+
     lateinit var healthConnectManager: HealthConnectManager
         private set
 
@@ -80,8 +86,24 @@ class BikeApplication : Application() {
         )
 
         phoneWearableManager = PhoneWearableManager(
-            context = applicationContext,
-            sessionManager = workoutSessionManager
+            context = applicationContext
+        )
+
+        heartRateArbiter = com.valpr.bikecompanion.companion.api.HeartRateArbiter(
+            sources = listOf(phoneWearableManager),
+            onUpdateHeartRate = { bpm ->
+                workoutSessionManager.updateHeartRate(bpm)
+            },
+            onClearHeartRate = {
+                workoutSessionManager.clearHeartRate()
+            }
+        )
+
+        companionHub = com.valpr.bikecompanion.companion.api.CompanionHub(
+            providers = listOf(phoneWearableManager),
+            workoutControl = workoutSessionManager,
+            sessionState = workoutSessionManager.sessionState,
+            hapticAlerts = workoutSessionManager.hapticAlerts
         )
 
         healthConnectManager = HealthConnectManager(
@@ -280,6 +302,8 @@ class BikeApplication : Application() {
 
     override fun onTerminate() {
         super.onTerminate()
+        companionHub.onDestroy()
+        heartRateArbiter.onDestroy()
         phoneWearableManager.onDestroy()
         healthConnectManager.onDestroy()
         bike.onDestroy()

@@ -24,6 +24,7 @@ sealed interface RemoteCommand {
     data object Pause : RemoteCommand
     data object Resume : RemoteCommand
     data object Stop : RemoteCommand
+    data object RequestSync : RemoteCommand
 }
 
 /**

@@ -220,4 +220,58 @@ class CompanionHubTest {
         assertEquals(3, provider.sentSnapshots.size) // Burst immediately
         assertTrue(provider.sentSnapshots.last().isCadenceFloorActive)
     }
+
+    @Test
+    fun remoteCommand_requestSync_triggersImmediateSnapshot() = runTest {
+        val control = FakeWorkoutControl()
+        val provider = FakeCompanionProvider()
+        val sessionState = MutableStateFlow(
+            WorkoutSessionState(status = SessionStatus.RUNNING)
+        )
+        val haptics = MutableSharedFlow<HapticAlertType>(extraBufferCapacity = 16)
+
+        CompanionHub(
+            providers = listOf(provider),
+            workoutControl = control,
+            sessionState = sessionState,
+            hapticAlerts = haptics,
+            scope = hubScope
+        )
+
+        hubScope.runCurrent()
+        provider.sentSnapshots.clear()
+
+        provider.remoteCommands.emit(RemoteCommand.RequestSync)
+        hubScope.runCurrent()
+
+        assertEquals(1, provider.sentSnapshots.size)
+        assertEquals(SessionStatus.RUNNING, provider.sentSnapshots[0].status)
+    }
+
+    @Test
+    fun providerConnection_triggersImmediateSnapshot_whenActive() = runTest {
+        val control = FakeWorkoutControl()
+        val provider = FakeCompanionProvider()
+        provider.linkState.value = DeviceLinkState.DISCONNECTED
+        val sessionState = MutableStateFlow(
+            WorkoutSessionState(status = SessionStatus.RUNNING)
+        )
+        val haptics = MutableSharedFlow<HapticAlertType>(extraBufferCapacity = 16)
+
+        CompanionHub(
+            providers = listOf(provider),
+            workoutControl = control,
+            sessionState = sessionState,
+            hapticAlerts = haptics,
+            scope = hubScope
+        )
+
+        hubScope.runCurrent()
+        assertEquals(0, provider.sentSnapshots.size)
+
+        provider.linkState.value = DeviceLinkState.CONNECTED
+        hubScope.runCurrent()
+
+        assertEquals(1, provider.sentSnapshots.size)
+    }
 }

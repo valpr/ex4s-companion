@@ -9,11 +9,18 @@ import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Node
 import com.google.android.gms.wearable.NodeClient
+import com.valpr.bikecompanion.companion.api.CompanionCapability
+import com.valpr.bikecompanion.companion.api.DeviceLinkState
+import com.valpr.bikecompanion.companion.api.HrStatus
+import com.valpr.bikecompanion.companion.api.RemoteCommand
+import com.valpr.bikecompanion.companion.api.RemoteWorkoutSnapshot
 import com.valpr.bikecompanion.shared.HapticAlertType
 import com.valpr.bikecompanion.shared.HeartRateBatch
 import com.valpr.bikecompanion.shared.PingPongMessage
 import com.valpr.bikecompanion.shared.WearableProtocol
+import com.valpr.bikecompanion.shared.WorkoutStateMessage
 import com.valpr.bikecompanion.wearable.PhoneWearableManager
+import com.valpr.bikecompanion.workout.SessionStatus
 import com.valpr.bikecompanion.workout.WorkoutSessionManager
 import com.valpr.bikecompanion.workout.WorkoutSessionState
 import io.mockk.every
@@ -25,6 +32,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -339,6 +347,173 @@ class PhoneWearableManagerTest {
         managerScope.runCurrent()
 
         verify { sessionManager.clearHeartRate() }
+        manager.onDestroy()
+    }
+
+    @Test
+    fun companionDeviceProvider_propertiesAndLinkState() = runTest {
+        val manager = createManager()
+        managerScope.runCurrent()
+
+        assertEquals("wear_os", manager.id)
+        assertTrue(manager.capabilities.contains(CompanionCapability.HEART_RATE))
+        assertTrue(manager.capabilities.contains(CompanionCapability.WORKOUT_MIRROR))
+        assertTrue(manager.capabilities.contains(CompanionCapability.ROTARY_INPUT))
+        assertTrue(manager.capabilities.contains(CompanionCapability.HAPTIC_FEEDBACK))
+
+        assertEquals(DeviceLinkState.DISCONNECTED, manager.linkState.value)
+
+        val node = mockNode("watch-456", "My Watch")
+        manager.updateWatchNode(node)
+        managerScope.runCurrent()
+
+        assertEquals(DeviceLinkState.CONNECTED, manager.linkState.value)
+        assertEquals("My Watch", manager.displayName)
+
+        manager.onPeerDisconnected(node)
+        managerScope.runCurrent()
+
+        assertEquals(DeviceLinkState.DISCONNECTED, manager.linkState.value)
+        manager.onDestroy()
+    }
+
+    @Test
+    fun heartRateSource_emitsSamplesAndTracksStatus() = runTest {
+        val manager = createManager()
+        managerScope.runCurrent()
+
+        assertEquals(HrStatus.DISCONNECTED, manager.hrStatus.value)
+        assertEquals(null, manager.hrSample.value)
+
+        val node = mockNode("watch-456", "My Watch")
+        manager.updateWatchNode(node)
+        managerScope.runCurrent()
+
+        assertEquals(HrStatus.CONNECTING, manager.hrStatus.value)
+
+        val hrPayload = HeartRateBatch(
+            timestampMs = currentTime,
+            bpmSamples = listOf(145),
+            accuracy = 3
+        ).toByteArray()
+        manager.onMessageReceived(mockMessageEvent(WearableProtocol.PATH_HEART_RATE, hrPayload, "watch-456"))
+        managerScope.runCurrent()
+
+        assertEquals(HrStatus.CONNECTED, manager.hrStatus.value)
+        assertEquals(145, manager.hrSample.value?.bpm)
+        assertEquals("My Watch", manager.hrSample.value?.deviceName)
+
+        // Advance 12.1 seconds to trigger staleness
+        managerScope.testScheduler.advanceTimeBy(12_100L)
+        managerScope.runCurrent()
+
+        assertEquals(HrStatus.STALE, manager.hrStatus.value)
+        assertEquals(null, manager.hrSample.value)
+
+        manager.onPeerDisconnected(node)
+        managerScope.runCurrent()
+
+        assertEquals(HrStatus.DISCONNECTED, manager.hrStatus.value)
+        manager.onDestroy()
+    }
+
+    @Test
+    fun remoteCommands_emittedOnWatchMessages() = runTest {
+        val manager = createManager()
+        managerScope.runCurrent()
+        manager.updateWatchNode(mockNode("watch-456", "My Watch"))
+
+        val received = mutableListOf<RemoteCommand>()
+        val job = managerScope.launch {
+            manager.remoteCommands.collect { received.add(it) }
+        }
+        managerScope.runCurrent()
+
+        manager.onMessageReceived(mockMessageEvent(WearableProtocol.PATH_ROTARY_BAILOUT, byteArrayOf(), "watch-456"))
+        manager.onMessageReceived(mockMessageEvent(WearableProtocol.PATH_RESUME_SLAP, byteArrayOf(), "watch-456"))
+        manager.onMessageReceived(mockMessageEvent(WearableProtocol.PATH_PAUSE_SESSION, byteArrayOf(), "watch-456"))
+        manager.onMessageReceived(mockMessageEvent(WearableProtocol.PATH_REQUEST_STATE, byteArrayOf(), "watch-456"))
+        managerScope.runCurrent()
+
+        assertEquals(
+            listOf(
+                RemoteCommand.ToggleClutch,
+                RemoteCommand.Resume,
+                RemoteCommand.ResumeManually,
+                RemoteCommand.Pause,
+                RemoteCommand.RequestSync
+            ),
+            received
+        )
+        job.cancel()
+        manager.onDestroy()
+    }
+
+    @Test
+    fun sendSnapshot_dispatchesWorkoutStateMessage() = runTest {
+        val manager = createManager()
+        managerScope.runCurrent()
+        manager.updateWatchNode(mockNode("watch-456", "My Watch"))
+        sentMessages.clear()
+
+        val snapshot = RemoteWorkoutSnapshot(
+            status = SessionStatus.RUNNING,
+            elapsedSeconds = 120,
+            totalSeconds = 600,
+            currentWatts = 180,
+            targetWatts = 200,
+            cadenceRpm = 88,
+            targetCadenceRpm = 90,
+            resistanceLevel = 14,
+            heartRateBpm = 142,
+            isBailoutActive = false,
+            isCadenceFloorActive = false,
+            isHrCapped = false,
+            workoutName = "HIIT 20",
+            athleteMaxHr = 185,
+            athleteRestingHr = 55,
+            useKarvonenZones = true,
+            intensityScale = 1.0f,
+            activeCue = "Keep pushing"
+        )
+
+        manager.sendSnapshot(snapshot)
+        managerScope.runCurrent()
+
+        assertEquals(1, sentMessages.size)
+        assertEquals("watch-456", sentMessages[0].nodeId)
+        assertEquals(WearableProtocol.PATH_WORKOUT_STATE, sentMessages[0].path)
+
+        val parsed = WorkoutStateMessage.fromByteArray(sentMessages[0].data)
+        assertNotNull(parsed)
+        assertEquals(WorkoutStateMessage.STATUS_RUNNING, parsed!!.sessionStatus)
+        assertEquals(120, parsed.elapsedSeconds)
+        assertEquals(200, parsed.targetWatts)
+        assertEquals(180, parsed.currentWatts)
+        assertEquals(88, parsed.cadenceRpm)
+        assertEquals(142, parsed.heartRateBpm)
+        assertEquals("HIIT 20", parsed.workoutName)
+        assertEquals(185, parsed.athleteMaxHr)
+        assertTrue(parsed.useKarvonenZones)
+        manager.onDestroy()
+    }
+
+    @Test
+    fun triggerHaptic_dispatchesHapticTrigger() = runTest {
+        val manager = createManager()
+        managerScope.runCurrent()
+        manager.updateWatchNode(mockNode("watch-456", "My Watch"))
+        sentMessages.clear()
+
+        manager.triggerHaptic(HapticAlertType.CRITICAL_HR_WARNING)
+        managerScope.runCurrent()
+
+        assertEquals(1, sentMessages.size)
+        assertEquals("watch-456", sentMessages[0].nodeId)
+        assertEquals(WearableProtocol.PATH_HAPTIC_TRIGGER, sentMessages[0].path)
+
+        val parsed = HapticAlertType.fromByteArray(sentMessages[0].data)
+        assertEquals(HapticAlertType.CRITICAL_HR_WARNING, parsed)
         manager.onDestroy()
     }
 }
