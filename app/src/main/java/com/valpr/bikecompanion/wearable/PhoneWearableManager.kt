@@ -132,6 +132,7 @@ class PhoneWearableManager(
     private var lastNodeRefreshMs = 0L
     private var lastHandledPingTimestamp = 0L
     private var lastClutchMs = 0L
+    private var hrWatchdogJob: Job? = null
 
     init {
         try {
@@ -198,6 +199,7 @@ class PhoneWearableManager(
                 if (primaryNode != null) {
                     updateWatchNode(primaryNode, isAppInstalled = false)
                 } else {
+                    val wasConnected = _watchState.value.isConnected
                     _watchState.update {
                         it.copy(
                             isConnected = false,
@@ -205,6 +207,10 @@ class PhoneWearableManager(
                             nodeName = "",
                             nodeId = ""
                         )
+                    }
+                    if (wasConnected) {
+                        hrWatchdogJob?.cancel()
+                        sessionManager.clearHeartRate()
                     }
                     Log.d(TAG, "No connected watch nodes found.")
                 }
@@ -223,6 +229,8 @@ class PhoneWearableManager(
         Log.i(TAG, "Watch peer disconnected: ${peer.displayName} (${peer.id})")
         if (_watchState.value.nodeId == peer.id) {
             _watchState.update { it.copy(isConnected = false) }
+            hrWatchdogJob?.cancel()
+            sessionManager.clearHeartRate()
         }
         refreshConnectedNodes()
     }
@@ -252,6 +260,7 @@ class PhoneWearableManager(
                 }
                 // Forward to WorkoutSessionManager for dynamic capping and UI
                 sessionManager.updateHeartRate(action.bpm)
+                resetHrWatchdog()
             }
 
             PhoneWearableRouter.Action.Clutch -> {
@@ -600,6 +609,14 @@ class PhoneWearableManager(
         }
     }
 
+    private fun resetHrWatchdog() {
+        hrWatchdogJob?.cancel()
+        hrWatchdogJob = scope.launch {
+            delay(HR_STALE_THRESHOLD_MS)
+            sessionManager.clearHeartRate()
+        }
+    }
+
     fun onDestroy() {
         try {
             messageClient.removeListener(this)
@@ -607,6 +624,7 @@ class PhoneWearableManager(
         } catch (e: Exception) {
             Log.w(TAG, "Error removing wearable listeners: ${e.message}")
         }
+        hrWatchdogJob?.cancel()
         pingClearJob?.cancel()
         pingTimeoutJob?.cancel()
         stateSyncJob?.cancel()

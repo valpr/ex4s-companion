@@ -19,6 +19,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -325,5 +326,37 @@ class WorkoutSessionManagerWearableTest {
         managerTime(2100L)
         assertTrue(manager.sessionState.value.elapsedSeconds >= 2)
         assertEquals(SessionStatus.RUNNING, manager.sessionState.value.status)
+    }
+
+    @Test
+    fun testClearHeartRate_releasesCriticalCapAndExcludesZeroFromSummary() = runTest {
+        telemetryFlow.value =
+            BikeTelemetry(cadenceRpm = 85, estimatedWatts = 200, resistanceLevel = 15, speedKmh = 30.0)
+        val manager = createSessionManager()
+        settleManager()
+
+        manager.startWorkout(null) // Free ride
+
+        // Bring into critical HR (threshold 175)
+        manager.updateHeartRate(180)
+        assertTrue(manager.sessionState.value.isCriticalHrActive)
+        assertTrue(ergController.isCriticalHrActive)
+
+        managerTime(1100L) // tick 1: HR 180 recorded
+
+        // Watch drops / stale -> clearHeartRate()
+        manager.clearHeartRate()
+        assertEquals(0, manager.sessionState.value.currentHeartRate)
+        assertFalse(manager.sessionState.value.isCriticalHrActive)
+        assertFalse(ergController.isCriticalHrActive)
+
+        managerTime(1100L) // tick 2: HR 0 recorded (filtered out of summary)
+
+        manager.stopWorkout()
+        val summary = manager.sessionState.value.summary
+        assertNotNull(summary)
+        // Summary should average only valid (>0) samples, so avg is 180, not (180+0)/2 = 90
+        assertEquals(180, summary!!.avgHeartRate)
+        assertEquals(180, summary.maxHeartRate)
     }
 }

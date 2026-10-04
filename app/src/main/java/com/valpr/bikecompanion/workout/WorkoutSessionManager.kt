@@ -231,6 +231,20 @@ class WorkoutSessionManager(
     }
 
     /**
+     * Clears heart rate state (e.g. on watch disconnect or telemetry staleness).
+     * Resets currentHeartRate to 0 and unlatches critical-HR capping.
+     */
+    fun clearHeartRate() {
+        ergController.isCriticalHrActive = false
+        _sessionState.update {
+            it.copy(
+                currentHeartRate = 0,
+                isCriticalHrActive = false
+            )
+        }
+    }
+
+    /**
      * Starts a structured workout or a free ride session.
      * Structured workouts require a configured FTP; Free Ride (`null`) is always allowed.
      * Both require a live bike connection — starting disconnected would record

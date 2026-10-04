@@ -10,6 +10,7 @@ import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Node
 import com.google.android.gms.wearable.NodeClient
 import com.valpr.bikecompanion.shared.HapticAlertType
+import com.valpr.bikecompanion.shared.HeartRateBatch
 import com.valpr.bikecompanion.shared.PingPongMessage
 import com.valpr.bikecompanion.shared.WearableProtocol
 import com.valpr.bikecompanion.wearable.PhoneWearableManager
@@ -294,6 +295,50 @@ class PhoneWearableManagerTest {
         manager.onMessageReceived(clutchEvent)
         managerScope.runCurrent()
         verify(exactly = 2) { sessionManager.toggleClutch() }
+        manager.onDestroy()
+    }
+
+    @Test
+    fun staleHeartRate_watchdogClearsHeartRateInSessionManager() = runTest {
+        val manager = createManager()
+        managerScope.runCurrent()
+
+        val hrPayload = HeartRateBatch(
+            timestampMs = currentTime,
+            bpmSamples = listOf(150),
+            accuracy = 3
+        ).toByteArray()
+        val event = mockMessageEvent(WearableProtocol.PATH_HEART_RATE, hrPayload)
+        manager.onMessageReceived(event)
+        managerScope.runCurrent()
+
+        verify { sessionManager.updateHeartRate(150) }
+
+        // Advance time by 11.9s -> watchdog should not have fired yet
+        managerScope.testScheduler.advanceTimeBy(11_900L)
+        managerScope.runCurrent()
+        verify(exactly = 0) { sessionManager.clearHeartRate() }
+
+        // Advance past 12s -> watchdog fires and clears HR in sessionManager
+        managerScope.testScheduler.advanceTimeBy(200L)
+        managerScope.runCurrent()
+        verify(exactly = 1) { sessionManager.clearHeartRate() }
+        manager.onDestroy()
+    }
+
+    @Test
+    fun peerDisconnect_clearsHeartRateInSessionManager() = runTest {
+        val manager = createManager()
+        managerScope.runCurrent()
+
+        val node = mockNode("watch-456", "My Watch")
+        manager.updateWatchNode(node)
+        managerScope.runCurrent()
+
+        manager.onPeerDisconnected(node)
+        managerScope.runCurrent()
+
+        verify { sessionManager.clearHeartRate() }
         manager.onDestroy()
     }
 }
