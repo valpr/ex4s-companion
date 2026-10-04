@@ -733,4 +733,40 @@ class WorkoutUiSemanticsTest {
 
         composeRule.onNodeWithText("BAILOUT").assertIsDisplayed()
     }
+
+    @Test
+    fun activeWorkout_safeAreaContent_displayedInStandardMode() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(
+                sessionManager = manager,
+                onFinish = {},
+                isInPipMode = false
+            )
+        }
+
+        composeRule.onNodeWithTag("active_workout_content").assertIsDisplayed()
+        composeRule.onNodeWithTag("pip_content").assertDoesNotExist()
+    }
+
+    @Test
+    fun activeWorkout_pipMode_hidesStandardSafeAreaContent() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(
+                sessionManager = manager,
+                onFinish = {},
+                isInPipMode = true
+            )
+        }
+
+        composeRule.onNodeWithTag("active_workout_content").assertDoesNotExist()
+        composeRule.onNodeWithTag("pip_content").assertIsDisplayed()
+    }
 }

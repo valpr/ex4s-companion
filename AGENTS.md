@@ -126,7 +126,7 @@ This document contains mandatory guidelines, invariants, and hard-learned lesson
 * **Conventional Commits Invariant:**
   * Commits are validated by `.githooks/commit-msg` against `^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_/-]+\))?: .+` (hyphen placed last in the class so BSD `grep` treats it literally — do not reintroduce `\-` escapes). Commits with vague subjects (e.g. `"wip"`, `"fixed"`) will be rejected.
 * **Pre-Commit Latency Discipline (< 1.5s):**
-  * The `.githooks/pre-commit` hook runs exclusively on staged files (`git diff --cached`). Never invoke heavy tasks (full test suite, Android Lint, or full-project builds) in `pre-commit`. Fast checks include: merge conflict markers, secret/key leaks, and [AGENTS.md](file:///C:/Users/Andrew/lw-bike-companion/AGENTS.md) banned imports (`android.util.Log` in `:shared`, hardcoded `Dispatchers.IO` in `BleCommandQueue.kt`).
+  * The `.githooks/pre-commit` hook runs exclusively on staged files (`git diff --cached`). Never invoke heavy tasks (full test suite, Android Lint, or full-project builds) in `pre-commit`. Fast checks include: merge conflict markers, secret/key leaks, and AGENTS.md banned imports / regressions (`android.util.Log` in `:shared`, hardcoded `Dispatchers.IO` in `BleCommandQueue.kt`, and `safeDrawingPadding` retention in `ActiveWorkoutScreen.kt`).
 
 ---
 
@@ -226,4 +226,23 @@ This document contains mandatory guidelines, invariants, and hard-learned lesson
     * Throttle steady-state telemetry to ~0.5Hz / 2s.
     * Burst immediately on state, bailout, cadence-floor, target-watt, or HR-cap changes.
     * Gate sensor reading exclusively on `RUNNING` or `PAUSED` session states.
+
+---
+
+## 12. Edge-to-Edge & System Window Insets Invariants
+* **Status Bar & Display Cutout Protection (`safeDrawingPadding`):**
+  * When `enableEdgeToEdge()` is active in `MainActivity`, the window draws behind all system bars.
+  * Screens without a standard `Scaffold`/`TopAppBar` (specifically `ActiveWorkoutScreen`) must apply `Modifier.safeDrawingPadding()` to their inner content containers.
+  * Header metrics (workout name, step/interval info, elapsed timer `00:00`, PiP button) must **never** be placed at fixed raw offsets (`padding(12.dp)` / `padding(16.dp)`) without accounting for `WindowInsets.safeDrawing`. Failing to do so causes physical overlap with system status bar elements (battery percentage/icon, system clock/time, Wi-Fi, notifications) and camera cutouts.
+* **Full-Bleed Backgrounds with Inset Content:**
+  * Backgrounds (`Surface(color = Color(0xFF0E1117))`) must remain full-bleed (`fillMaxSize()`) so theme styling extends seamlessly behind system bars and display cutouts.
+  * Insets (`Modifier.safeDrawingPadding()`) must be applied to the inner content container (e.g. `Box(modifier = Modifier.fillMaxSize().safeDrawingPadding())`), keeping the background edge-to-edge while insulating interactive and metric components from system overlays.
+* **Handlebar Landscape & Cutout Parity:**
+  * Equipment-mounted phones rotate to landscape orientation on handlebars. Display cutouts and navigation bars shift to horizontal display edges.
+  * Always use `safeDrawing` (which merges `systemBars` and `displayCutout`), ensuring side camera notches and rotated navigation bars do not obscure controls or gauges in landscape mode.
+* **Picture-in-Picture (PiP) Isolation:**
+  * PiP overlay windows do not have system bars or display cutouts. Keep PiP layouts (`PipWorkoutContent`) free of system bar inset padding so all available pixels in the 16:9 window remain dedicated to telemetry readouts.
+* **Enforced by Automated Architecture Checks:**
+  * Verified continuously by `UiWindowInsetsBoundaryTest` (ensuring all `*Screen.kt` files either use `Scaffold` or declare safe drawing / system bar insets) and guarded by `.githooks/pre-commit`.
+
 

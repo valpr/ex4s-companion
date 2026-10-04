@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -58,6 +59,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -110,22 +112,29 @@ fun ActiveWorkoutScreen(
             modifier = modifier.fillMaxSize(),
             color = Color(0xFF0E1117)
         ) {
-            if (isLandscape) {
-                LandscapeWorkoutContent(
-                    state = sessionState,
-                    sessionManager = sessionManager,
-                    onFinish = onFinish,
-                    watchState = watchState,
-                    onEnterPip = onEnterPip
-                )
-            } else {
-                PortraitWorkoutContent(
-                    state = sessionState,
-                    sessionManager = sessionManager,
-                    onFinish = onFinish,
-                    watchState = watchState,
-                    onEnterPip = onEnterPip
-                )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .safeDrawingPadding()
+                    .testTag("active_workout_content")
+            ) {
+                if (isLandscape) {
+                    LandscapeWorkoutContent(
+                        state = sessionState,
+                        sessionManager = sessionManager,
+                        onFinish = onFinish,
+                        watchState = watchState,
+                        onEnterPip = onEnterPip
+                    )
+                } else {
+                    PortraitWorkoutContent(
+                        state = sessionState,
+                        sessionManager = sessionManager,
+                        onFinish = onFinish,
+                        watchState = watchState,
+                        onEnterPip = onEnterPip
+                    )
+                }
             }
         }
     }

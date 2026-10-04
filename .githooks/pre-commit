@@ -42,6 +42,16 @@ if [ -n "$STAGED_FILES" ]; then
                 exit 1
             fi
         fi
+
+        # Check: ActiveWorkoutScreen must retain safeDrawingPadding (violates edge-to-edge insets in AGENTS.md §12)
+        if echo "$file" | grep -E "ActiveWorkoutScreen\.kt$" > /dev/null 2>&1; then
+            if ! grep -q "safeDrawingPadding" "$file" 2>/dev/null; then
+                echo "❌ Error: ActiveWorkoutScreen must retain safeDrawingPadding (violates AGENTS.md Section 12)."
+                echo "   Top items will clash with system status bar (battery/clock) without safeDrawing insets."
+                echo "   Offending file: $file"
+                exit 1
+            fi
+        fi
     done
 fi
 
