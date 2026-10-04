@@ -3,7 +3,6 @@ package com.valpr.bikecompanion
 import android.app.Application
 import android.bluetooth.BluetoothManager
 import android.content.Context
-import com.valpr.bikecompanion.ble.EchelonBleManager
 import com.valpr.bikecompanion.data.Profile
 import com.valpr.bikecompanion.data.ProfileRepository
 import com.valpr.bikecompanion.data.UserProfileRepository
@@ -22,8 +21,11 @@ import java.io.File
 
 class BikeApplication : Application() {
 
-    lateinit var bleManager: EchelonBleManager
+    lateinit var bike: com.valpr.bikecompanion.bike.api.BikeController
         private set
+
+    val bleManager: com.valpr.bikecompanion.bike.api.BikeController
+        get() = bike
 
     lateinit var profileRepository: ProfileRepository
         private set
@@ -66,13 +68,14 @@ class BikeApplication : Application() {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
         val bluetoothAdapter = bluetoothManager?.adapter
 
-        bleManager = EchelonBleManager(
+        bike = com.valpr.bikecompanion.bike.ble.BleBikeConnection(
             context = applicationContext,
-            bluetoothAdapter = bluetoothAdapter
+            bluetoothAdapter = bluetoothAdapter,
+            drivers = listOf(com.valpr.bikecompanion.bike.echelon.EchelonDriver())
         )
 
         workoutSessionManager = WorkoutSessionManager(
-            bleManager = bleManager,
+            bike = bike,
             userProfileRepository = userProfileRepository
         )
 
@@ -279,6 +282,6 @@ class BikeApplication : Application() {
         super.onTerminate()
         phoneWearableManager.onDestroy()
         healthConnectManager.onDestroy()
-        bleManager.onDestroy()
+        bike.onDestroy()
     }
 }

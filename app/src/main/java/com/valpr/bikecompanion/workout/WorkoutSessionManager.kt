@@ -1,6 +1,5 @@
 package com.valpr.bikecompanion.workout
 
-import com.valpr.bikecompanion.ble.EchelonBleManager
 import com.valpr.bikecompanion.data.BikeTelemetry
 import com.valpr.bikecompanion.data.UserProfile
 import com.valpr.bikecompanion.data.UserProfileRepository
@@ -112,18 +111,18 @@ class WorkoutSessionManager(
     private val isBikeConnected: () -> Boolean = { true }
 ) {
     constructor(
-        bleManager: EchelonBleManager,
+        bike: com.valpr.bikecompanion.bike.api.BikeController,
         userProfileRepository: UserProfileRepository,
         ergController: ErgController = ErgController(),
         scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     ) : this(
-        telemetryFlow = bleManager.telemetry,
-        onSetResistance = { bleManager.setResistance(it) },
+        telemetryFlow = bike.telemetry,
+        onSetResistance = { bike.setResistance(it) },
         userProfileFlow = userProfileRepository.userProfileFlow,
         ergController = ergController,
         scope = scope,
         isBikeConnected = {
-            bleManager.connectionState.value is com.valpr.bikecompanion.data.BleConnectionState.Connected
+            bike.connectionState.value is com.valpr.bikecompanion.data.BleConnectionState.Connected
         }
     )
 

@@ -18,5 +18,6 @@ data class DiscoveredBikeDevice(
     val name: String,
     val address: String,
     val rssi: Int,
-    val isEchelonDevice: Boolean = false
+    val isEchelonDevice: Boolean = false,
+    val driverId: String? = null
 )

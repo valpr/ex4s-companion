@@ -209,7 +209,7 @@ class AthleteStatsViewModel(application: Application) : AndroidViewModel(applica
 
     /** Shares the newest BLE packet log, or explains why none exists yet. */
     fun sharePacketLog() {
-        val file = bleManager.packetLogRecorder.latestLogFile()
+        val file = bleManager.packetLogRecorder?.latestLogFile()
         if (file == null) {
             _saveEvents.tryEmit("No packet log yet — connect to the bike first")
             return
