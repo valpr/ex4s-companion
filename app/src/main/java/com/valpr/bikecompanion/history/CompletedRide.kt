@@ -1,8 +1,10 @@
 package com.valpr.bikecompanion.history
 
+import com.valpr.bikecompanion.data.ProfilePaths
 import com.valpr.bikecompanion.workout.WorkoutMetricSample
 import com.valpr.bikecompanion.workout.WorkoutSummary
 import kotlinx.serialization.Serializable
+import java.security.MessageDigest
 
 /**
  * Persisted per-second sample. Mirrors [WorkoutMetricSample] in a
@@ -63,7 +65,9 @@ data class RideHeader(
     val avgHeartRate: Int = 0,
     val maxHeartRate: Int = 0,
     val totalWorkKj: Double = 0.0,
-    val totalCaloriesKcal: Int = 0
+    val totalCaloriesKcal: Int = 0,
+    /** Schema version of this record. Files written before versioning decode as 0. */
+    val schemaVersion: Int = 0
 )
 
 /**
@@ -85,7 +89,9 @@ data class CompletedRide(
     val maxHeartRate: Int = 0,
     val totalWorkKj: Double = 0.0,
     val totalCaloriesKcal: Int = 0,
-    val samples: List<StoredSample> = emptyList()
+    val samples: List<StoredSample> = emptyList(),
+    /** Schema version of this record. Files written before versioning decode as 0. */
+    val schemaVersion: Int = 0
 ) {
     fun header() = RideHeader(
         id = id,
@@ -101,7 +107,8 @@ data class CompletedRide(
         avgHeartRate = avgHeartRate,
         maxHeartRate = maxHeartRate,
         totalWorkKj = totalWorkKj,
-        totalCaloriesKcal = totalCaloriesKcal
+        totalCaloriesKcal = totalCaloriesKcal,
+        schemaVersion = schemaVersion
     )
 
     fun toSummary() = WorkoutSummary(
@@ -121,6 +128,9 @@ data class CompletedRide(
     )
 
     companion object {
+        /** Current JSON schema version for [CompletedRide] and [RideHeader]. */
+        const val SCHEMA_VERSION = 1
+
         fun rideIdFor(startTimeEpochMs: Long): String = "ride_$startTimeEpochMs"
 
         /**
@@ -131,7 +141,7 @@ data class CompletedRide(
         fun healthClientRecordIdFor(profileId: String?, startTimeEpochMs: Long): String {
             val base = rideIdFor(startTimeEpochMs)
             if (profileId.isNullOrBlank()) return base
-            val safe = profileId.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(12)
+            val safe = ProfilePaths.sanitizeForHealthRecord(profileId)
             return "${base}_$safe"
         }
 
@@ -139,12 +149,25 @@ data class CompletedRide(
          * Stable id for sessions with no start timestamp (never happens for real
          * sessions — the manager always stamps start — but keeps re-saves of the
          * same zero-start summary idempotent instead of minting a fresh id per call).
+         *
+         * Uses SHA-256 over a stable fingerprint (never `hashCode()`, whose 32-bit
+         * space collides fast across a multi-year ride library). Legacy files
+         * written with the old `hashCode()` id keep working — both share the
+         * `ride_h` prefix matched by history scans.
          */
         fun fallbackIdFor(summary: WorkoutSummary): String {
-            val hash = summary.workoutName.hashCode() * 31 +
-                summary.totalDurationSeconds * 31 +
-                summary.samples.hashCode()
-            return "ride_h" + hash.toUInt().toString()
+            val digest = MessageDigest.getInstance("SHA-256")
+            digest.update(summary.workoutName.toByteArray(Charsets.UTF_8))
+            digest.update(summary.totalDurationSeconds.toString().toByteArray(Charsets.UTF_8))
+            for (s in summary.samples) {
+                val sampleBytes = (
+                    "${s.elapsedSeconds},${s.watts},${s.targetWatts},${s.cadenceRpm}," +
+                        "${s.targetCadence},${s.resistance},${s.speedKmh},${s.heartRateBpm};"
+                    ).toByteArray(Charsets.UTF_8)
+                digest.update(sampleBytes)
+            }
+            val hex = digest.digest().take(8).joinToString("") { "%02x".format(it) }
+            return "ride_h$hex"
         }
 
         fun fromSummary(summary: WorkoutSummary, sourceWorkoutFilename: String? = null): CompletedRide {
@@ -167,7 +190,8 @@ data class CompletedRide(
                 maxHeartRate = summary.maxHeartRate,
                 totalWorkKj = summary.totalWorkKj,
                 totalCaloriesKcal = summary.totalCaloriesKcal,
-                samples = summary.samples.map { StoredSample.from(it) }
+                samples = summary.samples.map { StoredSample.from(it) },
+                schemaVersion = SCHEMA_VERSION
             )
         }
     }

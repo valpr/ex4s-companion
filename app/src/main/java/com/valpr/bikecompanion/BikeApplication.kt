@@ -3,6 +3,7 @@ package com.valpr.bikecompanion
 import android.app.Application
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import com.valpr.bikecompanion.data.LegacyMigration
 import com.valpr.bikecompanion.data.Profile
 import com.valpr.bikecompanion.data.ProfileRepository
 import com.valpr.bikecompanion.data.UserProfileRepository
@@ -130,60 +131,17 @@ class BikeApplication : Application() {
      * (`user_profile` DataStore + `filesDir/history/`) into the first profile.
      */
     private fun ensureProfilesAndMigrate(): Profile {
+        val hasLegacy = LegacyMigration.hasLegacyData(filesDir)
         val legacyHistoryDir = File(filesDir, WorkoutHistoryRepository.HISTORY_DIR)
-        val hasLegacyHistory = legacyHistoryDir.exists() &&
-            (legacyHistoryDir.listFiles()?.any { it.isFile && it.name.startsWith("ride_") } == true)
-        // Legacy DataStore file lives under datastore/user_profile.preferences_pb.
-        val legacyStoreFile = File(filesDir, "datastore/user_profile.preferences_pb")
-        val hasLegacyProfile = legacyStoreFile.exists()
+            .takeIf { hasLegacy }
         val profile = profileRepository.ensureInitialized(
-            legacyHistoryDir = legacyHistoryDir.takeIf { hasLegacyHistory || hasLegacyProfile },
-            hasLegacyUserProfile = hasLegacyProfile
+            legacyHistoryDir = legacyHistoryDir,
+            hasLegacyUserProfile = hasLegacy
         )
-        if (hasLegacyHistory || hasLegacyProfile) {
-            migrateLegacyDataIfNeeded(profile.id)
+        if (hasLegacy) {
+            LegacyMigration.migrate(filesDir, profile.id)
         }
         return profile
-    }
-
-    /**
-     * One-shot move of pre-profile data into the owning profile. Idempotent:
-     * skips when the destination already holds data.
-     */
-    private fun migrateLegacyDataIfNeeded(profileId: String) {
-        try {
-            // History: filesDir/history/ -> filesDir/profiles/<id>/history/
-            val legacyHistory = File(filesDir, WorkoutHistoryRepository.HISTORY_DIR)
-            val destHistory = ProfileRepository.historyDirFor(filesDir, profileId)
-            if (legacyHistory.exists() && legacyHistory.isDirectory) {
-                val destHasRides = destHistory.exists() &&
-                    (destHistory.listFiles()?.any { it.isFile && it.name.startsWith("ride_") } == true)
-                val legacyFiles = legacyHistory.listFiles()?.filter { it.isFile } ?: emptyList()
-                if (!destHasRides && legacyFiles.isNotEmpty()) {
-                    if (!destHistory.exists()) destHistory.mkdirs()
-                    for (f in legacyFiles) {
-                        try {
-                            val dest = File(destHistory, f.name)
-                            if (!dest.exists()) f.copyTo(dest)
-                        } catch (_: Exception) { }
-                    }
-                }
-            }
-            // Athlete DataStore: copy keys from legacy store into per-profile store.
-            // DataStore files are protobuf; key-level copy via repository read would
-            // need async — instead attempt a file copy when the dest has no file yet.
-            val legacyStoreFile = File(filesDir, "datastore/user_profile.preferences_pb")
-            val safe = profileId.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(48)
-            val destStoreFile = File(filesDir, "datastore/user_profile_$safe.preferences_pb")
-            if (legacyStoreFile.exists() && !destStoreFile.exists()) {
-                try {
-                    destStoreFile.parentFile?.mkdirs()
-                    legacyStoreFile.copyTo(destStoreFile)
-                } catch (_: Exception) { }
-            }
-        } catch (_: Exception) {
-            // Migration is best-effort; profile still usable with defaults.
-        }
     }
 
     private fun bindActiveProfile(profileId: String, rebindSession: Boolean) {
@@ -236,8 +194,7 @@ class BikeApplication : Application() {
         if (!ok) return false
         // Delete per-profile data files (best-effort).
         try {
-            val safe = profileId.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(48)
-            File(filesDir, "datastore/user_profile_$safe.preferences_pb").delete()
+            com.valpr.bikecompanion.data.ProfilePaths.userProfileStoreFile(filesDir, profileId).delete()
             val histDir = ProfileRepository.historyDirFor(filesDir, profileId)
             // histDir is .../profiles/<safe>/history — remove the profile root.
             histDir.parentFile?.deleteRecursively()

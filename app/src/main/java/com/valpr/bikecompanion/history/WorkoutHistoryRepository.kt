@@ -1,6 +1,7 @@
 package com.valpr.bikecompanion.history
 
 import android.content.Context
+import com.valpr.bikecompanion.data.ProfilePaths
 import com.valpr.bikecompanion.workout.WorkoutSummary
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -49,8 +50,13 @@ class WorkoutHistoryRepository(private val historyDirectory: File) {
             val staging = File(historyDirectory, "${ride.id}.json.tmp")
             staging.writeText(json.encodeToString(CompletedRide.serializer(), ride), Charsets.UTF_8)
             if (!staging.renameTo(target)) {
-                staging.delete()
-                return false
+                try {
+                    staging.copyTo(target, overwrite = true)
+                    staging.delete()
+                } catch (_: Exception) {
+                    staging.delete()
+                    return false
+                }
             }
             upsertIndexEntry(ride.header())
             true
@@ -83,7 +89,7 @@ class WorkoutHistoryRepository(private val historyDirectory: File) {
      * A corrupt file evicts its index entry so list and detail stop disagreeing.
      */
     fun loadRide(id: String): CompletedRide? = synchronized(lock) {
-        val safeId = id.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+        val safeId = ProfilePaths.sanitizeRideId(id)
         val file = File(historyDirectory, "$safeId.json")
         if (!file.exists()) {
             return null
@@ -99,7 +105,7 @@ class WorkoutHistoryRepository(private val historyDirectory: File) {
 
     /** Deletes a ride. Returns true only when a record was actually removed. */
     fun delete(id: String): Boolean = synchronized(lock) {
-        val safeId = id.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+        val safeId = ProfilePaths.sanitizeRideId(id)
         val file = File(historyDirectory, "$safeId.json")
         if (!file.exists()) {
             removeIndexEntry(safeId)
@@ -122,7 +128,10 @@ class WorkoutHistoryRepository(private val historyDirectory: File) {
     }?.toList() ?: emptyList()
 
     private fun decodeHeader(file: File): RideHeader? = try {
-        json.decodeFromString(CompletedRide.serializer(), file.readText(Charsets.UTF_8)).header()
+        // Header-only decode: RideHeader is a subset of CompletedRide, so with
+        // ignoreUnknownKeys the multi-thousand-sample "samples" array is skipped
+        // instead of parsed on every list-heal scan.
+        json.decodeFromString(RideHeader.serializer(), file.readText(Charsets.UTF_8))
     } catch (_: Exception) {
         null
     }
@@ -143,10 +152,20 @@ class WorkoutHistoryRepository(private val historyDirectory: File) {
 
     private fun writeIndex(headers: List<RideHeader>) {
         try {
-            indexFile().writeText(
+            // Atomic write-then-rename so a crash never leaves a half-written index.
+            val staging = File(historyDirectory, "$INDEX_FILENAME.tmp")
+            staging.writeText(
                 json.encodeToString(ListSerializer(RideHeader.serializer()), headers),
                 Charsets.UTF_8
             )
+            if (!staging.renameTo(indexFile())) {
+                try {
+                    staging.copyTo(indexFile(), overwrite = true)
+                    staging.delete()
+                } catch (_: Exception) {
+                    staging.delete()
+                }
+            }
         } catch (_: Exception) {
             // Index is a cache; full files remain the source of truth.
         }

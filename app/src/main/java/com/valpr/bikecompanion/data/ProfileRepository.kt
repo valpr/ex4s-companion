@@ -120,12 +120,6 @@ class ProfileRepository(private val storageDir: File) {
         if (error != null) return Result.failure(IllegalArgumentException(error))
         // Same name ignoring case-only differences counts as no-op success.
         val sanitized = Profile.sanitizeName(name)!!
-        if (sanitized.equals(existing.name, ignoreCase = false).not() &&
-            sanitized.equals(existing.name, ignoreCase = true) &&
-            sanitized != existing.name
-        ) {
-            // Allow case-only rename.
-        }
         val updated = existing.copy(name = sanitized)
         _profiles.value = _profiles.value.map { if (it.id == id) updated else it }
         persistLocked()
@@ -180,10 +174,14 @@ class ProfileRepository(private val storageDir: File) {
             val staging = File(storageDir, "$PROFILES_FILENAME.tmp")
             staging.writeText(json.encodeToString(PersistedProfiles.serializer(), snapshot), Charsets.UTF_8)
             val target = profilesFile()
-            if (staging.renameTo(target)) {
-                // ok
-            } else {
-                staging.delete()
+            if (!staging.renameTo(target)) {
+                // renameTo fails across filesystems — fall back to copy + delete.
+                try {
+                    staging.copyTo(target, overwrite = true)
+                    staging.delete()
+                } catch (_: Exception) {
+                    staging.delete()
+                }
             }
         } catch (_: Exception) {
             // Identity write failure must not wipe per-profile data.
@@ -206,6 +204,14 @@ class ProfileRepository(private val storageDir: File) {
             val active = snapshot.activeProfileId?.takeIf { id -> cleaned.any { it.id == id } }
             cleaned to active
         } catch (_: Exception) {
+            // Preserve the corrupt file for diagnosis (single bounded backup —
+            // overwritten on repeat failures) instead of overwriting on next persist.
+            try {
+                val corrupt = profilesFile()
+                if (corrupt.exists()) {
+                    corrupt.copyTo(File(storageDir, "$PROFILES_FILENAME.bak"), overwrite = true)
+                }
+            } catch (_: Exception) { }
             null
         }
     }
@@ -220,15 +226,9 @@ class ProfileRepository(private val storageDir: File) {
         const val PROFILES_FILENAME = "profiles.json"
 
         /** Per-profile athlete DataStore file name. */
-        fun userProfileStoreName(profileId: String): String {
-            val safe = profileId.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(48)
-            return "user_profile_$safe"
-        }
+        fun userProfileStoreName(profileId: String): String = ProfilePaths.userProfileStoreName(profileId)
 
         /** Per-profile history directory. */
-        fun historyDirFor(baseFilesDir: File, profileId: String): File {
-            val safe = profileId.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(48)
-            return File(File(baseFilesDir, "profiles"), "$safe/history")
-        }
+        fun historyDirFor(baseFilesDir: File, profileId: String): File = ProfilePaths.historyDirFor(baseFilesDir, profileId)
     }
 }

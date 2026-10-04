@@ -1,6 +1,5 @@
 package com.valpr.bikecompanion.data
 
-import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -11,7 +10,6 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import com.valpr.bikecompanion.shared.AthleteMetrics
 import com.valpr.bikecompanion.shared.BiologicalSex
 import com.valpr.bikecompanion.shared.HrZone
@@ -20,16 +18,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import java.io.IOException
-
-val Context.userProfileDataStore: DataStore<Preferences> by preferencesDataStore(name = "user_profile")
-
-/** Per-profile athlete DataStore (see ProfileRepository.userProfileStoreName). */
-fun Context.userProfileDataStoreFor(profileId: String): DataStore<Preferences> {
-    val safe = profileId.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(48)
-    return androidx.datastore.preferences.core.PreferenceDataStoreFactory.create(
-        produceFile = { java.io.File(filesDir, "datastore/user_profile_$safe.preferences_pb") }
-    )
-}
 
 /**
  * Athlete profile data required for power target calculations and ERG tuning.
@@ -137,6 +125,9 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
         const val DEFAULT_BEGINNER_PATH_COLLAPSED = false
         const val DEFAULT_USE_KARVONEN_ZONES = false
         const val DEFAULT_AUTO_ENTER_PIP = true
+
+        /** Case-insensitive comparison key for favorite filenames. */
+        fun favoriteKey(filename: String): String = filename.trim().lowercase(java.util.Locale.ROOT)
     }
 
     val userProfileFlow: Flow<UserProfile> = dataStore.data
@@ -268,6 +259,7 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun updateUnitSystem(unitSystem: UnitSystem) {
         dataStore.edit { preferences ->
             preferences[KEY_UNIT_SYSTEM] = unitSystem.name
+            preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
         }
     }
 
@@ -282,47 +274,55 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
             preferences[KEY_CADENCE_RECOVERY] = cadenceRecoveryRpm.coerceIn(60, 100)
             preferences[KEY_ERG_KP] = kp.coerceIn(0.001f, 0.5f)
             preferences[KEY_ERG_KI] = ki.coerceIn(0.0001f, 0.1f)
+            preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
         }
     }
 
     suspend fun updateKeepScreenOn(keepScreenOn: Boolean) {
         dataStore.edit { preferences ->
             preferences[KEY_KEEP_SCREEN_ON] = keepScreenOn
+            preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
         }
     }
 
     suspend fun updateAutoEnterPip(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[KEY_AUTO_ENTER_PIP] = enabled
+            preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
         }
     }
 
     suspend fun setHealthSyncEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[KEY_HEALTH_SYNC_ENABLED] = enabled
+            preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
         }
     }
 
     suspend fun updateBeginnerPathDismissed(dismissed: Boolean) {
         dataStore.edit { preferences ->
             preferences[KEY_BEGINNER_PATH_DISMISSED] = dismissed
+            preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
         }
     }
 
     suspend fun updateBeginnerPathCollapsed(collapsed: Boolean) {
         dataStore.edit { preferences ->
             preferences[KEY_BEGINNER_PATH_COLLAPSED] = collapsed
+            preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
         }
     }
 
     suspend fun toggleFavoriteWorkout(filename: String) {
+        val trimmed = filename.trim()
+        if (trimmed.isEmpty()) return
         dataStore.edit { preferences ->
             val current = preferences[KEY_FAVORITE_WORKOUTS] ?: emptySet()
-            val normalized = filename.lowercase()
-            val updated = if (current.any { it.equals(normalized, ignoreCase = true) }) {
-                current.filterNot { it.equals(normalized, ignoreCase = true) }.toSet()
+            val key = favoriteKey(trimmed)
+            val updated = if (current.any { favoriteKey(it) == key }) {
+                current.filterNot { favoriteKey(it) == key }.toSet()
             } else {
-                current + normalized
+                current + trimmed
             }
             preferences[KEY_FAVORITE_WORKOUTS] = updated
             preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
@@ -330,12 +330,14 @@ class UserProfileRepository(private val dataStore: DataStore<Preferences>) {
     }
 
     suspend fun removeFavoriteWorkout(filename: String) {
+        val trimmed = filename.trim()
+        if (trimmed.isEmpty()) return
         dataStore.edit { preferences ->
             val current = preferences[KEY_FAVORITE_WORKOUTS] ?: emptySet()
-            val normalized = filename.lowercase()
-            if (current.any { it.equals(normalized, ignoreCase = true) }) {
+            val key = favoriteKey(trimmed)
+            if (current.any { favoriteKey(it) == key }) {
                 preferences[KEY_FAVORITE_WORKOUTS] =
-                    current.filterNot { it.equals(normalized, ignoreCase = true) }.toSet()
+                    current.filterNot { favoriteKey(it) == key }.toSet()
                 preferences[KEY_LAST_UPDATED] = System.currentTimeMillis()
             }
         }

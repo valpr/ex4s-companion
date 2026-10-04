@@ -160,4 +160,34 @@ class WorkoutRepositoryTest {
         assertTrue(traversal.endsWith(".zwo", ignoreCase = true))
         assertEquals("my_ride.zwo", repository.sanitizeFilename("my ride"))
     }
+
+    @Test
+    fun loadAndDelete_sanitizeTraversalStaysInsideDirectory() {
+        val xml = """
+            <workout_file>
+                <name>Real</name>
+                <workout><SteadyState Duration="300" Power="0.60"/></workout>
+            </workout_file>
+        """.trimIndent()
+        repository.saveWorkout("real.zwo", xml)
+        assertTrue(repository.loadWorkout("../../etc/passwd").isFailure)
+        assertFalse(repository.deleteWorkout("../real.zwo"))
+        assertTrue(repository.workoutExists("real.zwo"))
+    }
+
+    @Test
+    fun headerCache_picksUpExternalChanges() {
+        val xml = """
+            <workout_file>
+                <name>Cached</name>
+                <workout><SteadyState Duration="300" Power="0.60"/></workout>
+            </workout_file>
+        """.trimIndent()
+        repository.saveWorkout("cached.zwo", xml)
+        assertEquals(1, repository.getCachedWorkouts().size)
+        // Simulate an out-of-band file drop (e.g. system restore): snapshot
+        // validation must invalidate the cache without an explicit mutation.
+        File(tempDir, "external.zwo").writeText(xml, Charsets.UTF_8)
+        assertEquals(2, repository.getCachedWorkouts().size)
+    }
 }

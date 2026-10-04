@@ -188,4 +188,36 @@ class UserProfileRepositoryTest {
         r.removeFavoriteWorkout("non_existent.zwo")
         assertEquals(1, r.userProfileFlow.first().favoriteWorkoutFilenames.size)
     }
+
+    @Test
+    fun allWriters_bumpLastUpdated() = runTest {
+        val r = repo()
+        val before = System.currentTimeMillis()
+        r.updateUnitSystem(UnitSystem.IMPERIAL)
+        r.updateEngineTuning()
+        r.updateKeepScreenOn(false)
+        r.updateAutoEnterPip(false)
+        r.setHealthSyncEnabled(true)
+        r.updateBeginnerPathDismissed(true)
+        r.updateBeginnerPathCollapsed(true)
+        assertTrue(r.userProfileFlow.first().lastUpdatedEpochMs >= before)
+    }
+
+    @Test
+    fun toggleFavorite_preservesCaseMatchesCaseInsensitively() = runTest {
+        val r = repo()
+        r.toggleFavoriteWorkout("Sweet_Spot.ZWO")
+        val favs = r.userProfileFlow.first().favoriteWorkoutFilenames
+        assertTrue(favs.contains("Sweet_Spot.ZWO"))
+        // Case-insensitive toggle removes the original-cased entry.
+        r.toggleFavoriteWorkout("sweet_spot.zwo")
+        assertTrue(r.userProfileFlow.first().favoriteWorkoutFilenames.isEmpty())
+    }
+
+    @Test
+    fun toggleFavorite_blankIsNoOp() = runTest {
+        val r = repo()
+        r.toggleFavoriteWorkout("   ")
+        assertTrue(r.userProfileFlow.first().favoriteWorkoutFilenames.isEmpty())
+    }
 }
