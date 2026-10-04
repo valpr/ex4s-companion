@@ -14,7 +14,7 @@ import com.valpr.bikecompanion.data.EchelonWattTable
 import java.util.UUID
 
 class EchelonBikeProtocol(
-    override val capabilities: BikeCapabilities = BikeCapabilities.DEFAULT_ECHELON,
+    override val capabilities: BikeCapabilities = BikeCapabilities.DEFAULT_ECHELON.copy(resistanceModel = EchelonResistanceModel),
     override val resistanceModel: ResistanceModel = EchelonResistanceModel
 ) : BikeProtocol {
 

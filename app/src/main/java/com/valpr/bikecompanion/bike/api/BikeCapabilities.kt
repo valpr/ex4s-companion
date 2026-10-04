@@ -8,7 +8,8 @@ data class BikeCapabilities(
     val resistanceRange: IntRange = 1..32,
     val reportsMeasuredPower: Boolean = false,
     val supportsNativeErg: Boolean = false,
-    val reportsDistance: Boolean = true
+    val reportsDistance: Boolean = true,
+    val resistanceModel: ResistanceModel? = null
 ) {
     companion object {
         val DEFAULT_ECHELON = BikeCapabilities()

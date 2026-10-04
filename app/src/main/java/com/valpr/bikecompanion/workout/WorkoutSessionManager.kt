@@ -1,6 +1,9 @@
 package com.valpr.bikecompanion.workout
 
+import com.valpr.bikecompanion.bike.api.BikeCapabilities
+import com.valpr.bikecompanion.bike.api.BikeController
 import com.valpr.bikecompanion.data.BikeTelemetry
+import com.valpr.bikecompanion.data.BleConnectionState
 import com.valpr.bikecompanion.data.UserProfile
 import com.valpr.bikecompanion.data.UserProfileRepository
 import com.valpr.bikecompanion.engine.ErgController
@@ -79,6 +82,7 @@ data class WorkoutSessionState(
     val athleteRestingHr: Int = 60,
     val useKarvonenZones: Boolean = false,
     val athletePreferredCadence: Int = 85,
+    val bikeCapabilities: BikeCapabilities = BikeCapabilities.DEFAULT_ECHELON,
     val summary: WorkoutSummary? = null
 ) {
     val isFreeRide: Boolean get() = workout == null
@@ -108,10 +112,11 @@ class WorkoutSessionManager(
     private val userProfileFlow: kotlinx.coroutines.flow.Flow<UserProfile>,
     private val ergController: ErgController = ErgController(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
-    private val isBikeConnected: () -> Boolean = { true }
+    private val isBikeConnected: () -> Boolean = { true },
+    capabilitiesFlow: StateFlow<BikeCapabilities> = MutableStateFlow(BikeCapabilities.DEFAULT_ECHELON)
 ) {
     constructor(
-        bike: com.valpr.bikecompanion.bike.api.BikeController,
+        bike: BikeController,
         userProfileRepository: UserProfileRepository,
         ergController: ErgController = ErgController(),
         scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -122,8 +127,9 @@ class WorkoutSessionManager(
         ergController = ergController,
         scope = scope,
         isBikeConnected = {
-            bike.connectionState.value is com.valpr.bikecompanion.data.BleConnectionState.Connected
-        }
+            bike.connectionState.value is BleConnectionState.Connected
+        },
+        capabilitiesFlow = bike.capabilities
     )
 
     private val _sessionState = MutableStateFlow(WorkoutSessionState())
@@ -156,6 +162,18 @@ class WorkoutSessionManager(
         scope.launch {
             telemetryFlow.collect { telemetry ->
                 _sessionState.update { it.copy(latestTelemetry = telemetry) }
+            }
+        }
+
+        // Observe bike capabilities while IDLE to update resistance range and model
+        scope.launch {
+            capabilitiesFlow.collect { capabilities ->
+                if (_sessionState.value.status == SessionStatus.IDLE) {
+                    _sessionState.update { it.copy(bikeCapabilities = capabilities) }
+                    capabilities.resistanceModel?.let { model ->
+                        ergController.resistanceModel = model
+                    }
+                }
             }
         }
 
@@ -292,6 +310,7 @@ class WorkoutSessionManager(
                 athleteRestingHr = it.athleteRestingHr,
                 useKarvonenZones = it.useKarvonenZones,
                 athletePreferredCadence = it.athletePreferredCadence,
+                bikeCapabilities = it.bikeCapabilities,
                 summary = null
             )
         }
@@ -321,7 +340,7 @@ class WorkoutSessionManager(
     }
 
     fun setManualResistance(level: Int) {
-        val clamped = level.coerceIn(1, 32)
+        val clamped = level.coerceIn(_sessionState.value.bikeCapabilities.resistanceRange)
         onSetResistance(clamped)
     }
 
@@ -406,7 +425,8 @@ class WorkoutSessionManager(
                 athleteMaxHr = it.athleteMaxHr,
                 athleteRestingHr = it.athleteRestingHr,
                 useKarvonenZones = it.useKarvonenZones,
-                athletePreferredCadence = it.athletePreferredCadence
+                athletePreferredCadence = it.athletePreferredCadence,
+                bikeCapabilities = it.bikeCapabilities
             )
         }
     }

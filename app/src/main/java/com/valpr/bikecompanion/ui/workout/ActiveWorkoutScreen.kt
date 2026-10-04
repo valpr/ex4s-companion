@@ -197,7 +197,8 @@ private fun PortraitWorkoutContent(
                 // manual electronic shifter here (AGENTS.md §2).
                 FreeRideResistancePanel(
                     currentResistance = state.latestTelemetry.resistanceLevel,
-                    onResistanceChange = { sessionManager.setManualResistance(it) }
+                    onResistanceChange = { sessionManager.setManualResistance(it) },
+                    resistanceRange = state.bikeCapabilities.resistanceRange
                 )
             } else {
                 // The Clutch (Manual ERG Bailout Button)
@@ -207,7 +208,8 @@ private fun PortraitWorkoutContent(
             // Free Ride: Electronic Resistance Shifter & Live Stats Panel
             FreeRideResistancePanel(
                 currentResistance = state.latestTelemetry.resistanceLevel,
-                onResistanceChange = { sessionManager.setManualResistance(it) }
+                onResistanceChange = { sessionManager.setManualResistance(it) },
+                resistanceRange = state.bikeCapabilities.resistanceRange
             )
         }
 
@@ -277,6 +279,7 @@ private fun LandscapeWorkoutContent(
                         currentResistance = state.latestTelemetry.resistanceLevel,
                         onResistanceChange = { sessionManager.setManualResistance(it) },
                         modifier = Modifier.weight(1f),
+                        resistanceRange = state.bikeCapabilities.resistanceRange,
                         enableInnerScroll = true
                     )
                 }
@@ -285,6 +288,7 @@ private fun LandscapeWorkoutContent(
                     currentResistance = state.latestTelemetry.resistanceLevel,
                     onResistanceChange = { sessionManager.setManualResistance(it) },
                     modifier = Modifier.weight(1f),
+                    resistanceRange = state.bikeCapabilities.resistanceRange,
                     enableInnerScroll = true
                 )
             }
@@ -534,7 +538,7 @@ private fun TheBigThree(state: WorkoutSessionState, watchState: WearableWatchSta
             BigMetricTile(
                 label = "RESISTANCE",
                 value = "L${telem.resistanceLevel}",
-                unit = "32",
+                unit = "${state.bikeCapabilities.resistanceRange.last}",
                 target = "%.1f km/h".format(telem.speedKmh),
                 accentColor = Color(0xFFFFB300),
                 modifier = Modifier.weight(1f)
@@ -772,9 +776,10 @@ private fun FreeRideResistancePanel(
     currentResistance: Int,
     onResistanceChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    resistanceRange: IntRange = 1..32,
     enableInnerScroll: Boolean = false
 ) {
-    val presets = listOf(1, 4, 8, 12, 16, 20, 24, 28, 32)
+    val presets = ResistancePresets.forRange(resistanceRange)
 
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1E232A)),
@@ -818,7 +823,7 @@ private fun FreeRideResistancePanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
-                    onClick = { onResistanceChange((currentResistance - 1).coerceAtLeast(1)) },
+                    onClick = { onResistanceChange((currentResistance - 1).coerceAtLeast(resistanceRange.first)) },
                     modifier = Modifier
                         .size(44.dp)
                         .clip(CircleShape)
@@ -836,7 +841,7 @@ private fun FreeRideResistancePanel(
                 )
 
                 IconButton(
-                    onClick = { onResistanceChange((currentResistance + 1).coerceAtMost(32)) },
+                    onClick = { onResistanceChange((currentResistance + 1).coerceAtMost(resistanceRange.last)) },
                     modifier = Modifier
                         .size(44.dp)
                         .clip(CircleShape)
@@ -846,12 +851,12 @@ private fun FreeRideResistancePanel(
                 }
             }
 
-            // Continuous discrete slider 1..32
+            // Continuous discrete slider
             Slider(
-                value = currentResistance.toFloat(),
-                onValueChange = { onResistanceChange(it.roundToInt().coerceIn(1, 32)) },
-                valueRange = 1f..32f,
-                steps = 30,
+                value = currentResistance.toFloat().coerceIn(resistanceRange.first.toFloat(), resistanceRange.last.toFloat()),
+                onValueChange = { onResistanceChange(it.roundToInt().coerceIn(resistanceRange)) },
+                valueRange = resistanceRange.first.toFloat()..resistanceRange.last.toFloat(),
+                steps = (resistanceRange.last - resistanceRange.first - 1).coerceAtLeast(0),
                 colors = SliderDefaults.colors(
                     thumbColor = Color(0xFFFFB300),
                     activeTrackColor = Color(0xFFFFB300),

@@ -1,5 +1,7 @@
 package com.valpr.bikecompanion.engine
 
+import com.valpr.bikecompanion.bike.api.ResistanceModel
+import com.valpr.bikecompanion.bike.echelon.EchelonResistanceModel
 import com.valpr.bikecompanion.data.EchelonWattTable
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -54,6 +56,7 @@ data class ErgDecision(
  * 6. Recovery gate requiring >= 75 RPM sustained for 3 consecutive seconds to re-engage.
  */
 class ErgController(
+    var resistanceModel: ResistanceModel = EchelonResistanceModel,
     var kp: Double = 0.05,
     var ki: Double = 0.01,
     var cadenceFloorRpm: Double = 60.0,
@@ -65,6 +68,8 @@ class ErgController(
     var hrCappingScale: Double = 0.90, // 10% reduction when HR is critical
     var belowFloorRequiredSeconds: Int = 2 // consecutive sub-floor ticks before bailout entry
 ) {
+    val minResistance: Int get() = resistanceModel.range.first
+    val maxResistance: Int get() = resistanceModel.range.last
     companion object {
         const val MAX_TRIM = 3
         const val MIN_RESISTANCE = EchelonWattTable.MIN_RESISTANCE
@@ -311,13 +316,13 @@ class ErgController(
         val errorWatts = effectiveTargetWatts - actualWatts
 
         // Step 1: Feedforward base resistance from authoritative Watt Table
-        val nominalResistance = EchelonWattTable.resistanceFromPowerTarget(effectiveTargetWatts, smoothedCadence)
+        val nominalResistance = resistanceModel.levelForWatts(effectiveTargetWatts, smoothedCadence)
 
         // Step 2: 5W Deadband check (only if target power hasn't changed)
         val isSameTarget = lastTargetWatts == effectiveTargetWatts
         if (isSameTarget && abs(errorWatts) <= deadbandWatts) {
             // Power is within deadband on steady target. Retain current resistance.
-            val currentRes = lastCommandedResistance.coerceIn(MIN_RESISTANCE, MAX_RESISTANCE)
+            val currentRes = lastCommandedResistance.coerceIn(minResistance, maxResistance)
             return ErgDecision(
                 state = state,
                 targetResistance = currentRes,
@@ -339,7 +344,7 @@ class ErgController(
         val iTerm = ki * integralError
 
         val trimOffset = (pTerm + iTerm).roundToInt().coerceIn(-MAX_TRIM, MAX_TRIM)
-        val calculatedResistance = (nominalResistance + trimOffset).coerceIn(MIN_RESISTANCE, MAX_RESISTANCE)
+        val calculatedResistance = (nominalResistance + trimOffset).coerceIn(minResistance, maxResistance)
 
         val shouldSend = calculatedResistance != lastCommandedResistance
         lastCommandedResistance = calculatedResistance

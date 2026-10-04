@@ -16,7 +16,7 @@ object WorkoutValidator {
     const val MIN_CADENCE_RPM = 40
     const val MAX_CADENCE_RPM = 140
 
-    /** Peak intensity above this warns: resistance 1..32 may not deliver it at high FTP. */
+    /** Peak intensity above this warns: bike max resistance may not deliver it at high FTP. */
     const val ERG_REACH_FRACTION = 1.35f
 
     /** TSS above this warns that the session is very demanding. */
@@ -119,7 +119,7 @@ object WorkoutValidator {
                 ValidationIssue(
                     null,
                     Field.TOTAL,
-                    "Peak intensity is very high and may exceed resistance 32 at high FTP",
+                    "Peak intensity is very high and may exceed the bike's max resistance at high FTP",
                     false
                 )
             )
