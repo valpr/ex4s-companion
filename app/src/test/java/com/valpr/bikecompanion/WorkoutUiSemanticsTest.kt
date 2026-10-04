@@ -77,10 +77,10 @@ class WorkoutUiSemanticsTest {
         managerScope.cancel()
     }
 
-    private fun createManager(): WorkoutSessionManager = WorkoutSessionManager(
+    private fun createManager(userProfile: UserProfile = profile): WorkoutSessionManager = WorkoutSessionManager(
         telemetryFlow = telemetryFlow,
         onSetResistance = { dispatchedResistance.add(it) },
-        userProfileFlow = flowOf(profile),
+        userProfileFlow = flowOf(userProfile),
         ergController = ErgController(),
         scope = managerScope
     )
@@ -358,6 +358,164 @@ class WorkoutUiSemanticsTest {
         composeRule.onNodeWithText("Live HR", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("HEART RATE").assertIsDisplayed()
         composeRule.onNodeWithText("HEART RATE (STALE)").assertDoesNotExist()
+    }
+
+    @Test
+    fun hrTile_withHeartRate_showsZoneGauge() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+        manager.updateHeartRate(142)
+        val liveWatch = WearableWatchState(
+            isConnected = true,
+            nodeName = "Pixel Watch 3",
+            nodeId = "node-1",
+            lastHeartRateBpm = 142,
+            lastHeartRateTimestampMs = System.currentTimeMillis()
+        )
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {}, watchState = liveWatch)
+        }
+
+        composeRule.onNodeWithTag("hr_zone_gauge").assertIsDisplayed()
+        composeRule.onNodeWithText("HEART RATE").assertIsDisplayed()
+        composeRule.onNodeWithText("HEART RATE (OFFLINE)").assertDoesNotExist()
+        // Lit (non-dimmed) gauge exposes its zone for accessibility.
+        composeRule.onNodeWithContentDescription("zone 3 of 5, 142 BPM", substring = true)
+            .assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("dimmed", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun hrTile_withoutHeartRate_hidesZoneGauge_showsResistance() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {})
+        }
+
+        composeRule.onNodeWithTag("hr_zone_gauge").assertDoesNotExist()
+        composeRule.onNodeWithText("RESISTANCE").assertIsDisplayed()
+    }
+
+    @Test
+    fun hrTile_staleLink_keepsGaugeButDimsIt() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+        manager.updateHeartRate(142)
+        val staleWatch = WearableWatchState(
+            isConnected = true,
+            nodeName = "Pixel Watch 3",
+            nodeId = "node-1",
+            lastHeartRateBpm = 142,
+            lastHeartRateTimestampMs = System.currentTimeMillis() - 60_000L
+        )
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {}, watchState = staleWatch)
+        }
+
+        composeRule.onNodeWithText("HEART RATE (STALE)").assertIsDisplayed()
+        composeRule.onNodeWithTag("hr_zone_gauge").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("dimmed", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun hrTile_offlineLink_keepsGaugeButDimsIt() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+        manager.updateHeartRate(142)
+        val offlineWatch = WearableWatchState(
+            isConnected = false,
+            nodeName = "",
+            nodeId = "",
+            lastHeartRateBpm = 142,
+            lastHeartRateTimestampMs = System.currentTimeMillis()
+        )
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {}, watchState = offlineWatch)
+        }
+
+        composeRule.onNodeWithText("HEART RATE (OFFLINE)").assertIsDisplayed()
+        composeRule.onNodeWithTag("hr_zone_gauge").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("dimmed", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun hrTile_criticalHr_keepsZoneGauge_showsCappedLabel() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+        // Default profile criticalHR is 181: 185 latches critical capping.
+        manager.updateHeartRate(185)
+        val liveWatch = WearableWatchState(
+            isConnected = true,
+            nodeName = "Pixel Watch 3",
+            nodeId = "node-1",
+            lastHeartRateBpm = 185,
+            lastHeartRateTimestampMs = System.currentTimeMillis()
+        )
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {}, watchState = liveWatch)
+        }
+
+        composeRule.onNodeWithText("CRITICAL CAPPED", substring = true).assertIsDisplayed()
+        // Critical recolors the number red but leaves the zone arcs zoned (not dimmed).
+        composeRule.onNodeWithTag("hr_zone_gauge").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("dimmed", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun hrTile_karvonenMode_showsZoneGauge() {
+        val manager = createManager(profile.copy(useKarvonenZones = true))
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+        // Karvonen (max 190, rest 60): Z2 spans 138–151, so the same 142 BPM
+        // that reads Z3 under %max reads Z2 here — proving the mode switch.
+        manager.updateHeartRate(142)
+        val liveWatch = WearableWatchState(
+            isConnected = true,
+            nodeName = "Pixel Watch 3",
+            nodeId = "node-1",
+            lastHeartRateBpm = 142,
+            lastHeartRateTimestampMs = System.currentTimeMillis()
+        )
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {}, watchState = liveWatch)
+        }
+
+        composeRule.onNodeWithTag("hr_zone_gauge").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("zone 2 of 5, 142 BPM", substring = true)
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun hrTile_landscape_showsZoneGauge() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkout(null)
+        manager.updateHeartRate(142)
+        val landscape = android.content.res.Configuration().apply {
+            orientation = android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        }
+
+        composeRule.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalConfiguration provides landscape
+            ) {
+                ActiveWorkoutScreen(sessionManager = manager, onFinish = {})
+            }
+        }
+
+        composeRule.onNodeWithTag("hr_zone_gauge").assertIsDisplayed()
     }
 
     @Test

@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import com.valpr.bikecompanion.engine.ErgState
 import com.valpr.bikecompanion.shared.CadenceEvaluator
 import com.valpr.bikecompanion.shared.CadenceState
+import com.valpr.bikecompanion.shared.HrZone
 import com.valpr.bikecompanion.ui.components.WorkoutCanvasProfile
 import com.valpr.bikecompanion.wearable.PhoneWearableManager
 import com.valpr.bikecompanion.wearable.WatchHrStatus
@@ -507,7 +508,7 @@ private fun TheBigThree(state: WorkoutSessionState, watchState: WearableWatchSta
         // 3. Heart Rate or Speed / Resistance
         if (state.currentHeartRate > 0) {
             // Shared zone thresholds (same as watch) based on athlete HR parameters and Karvonen preference.
-            val zone = com.valpr.bikecompanion.shared.HrZone.zoneNumber(
+            val zone = HrZone.zoneNumber(
                 bpm = state.currentHeartRate,
                 maxHr = state.athleteMaxHr,
                 restingHr = state.athleteRestingHr,
@@ -541,7 +542,16 @@ private fun TheBigThree(state: WorkoutSessionState, watchState: WearableWatchSta
                 unit = "BPM",
                 target = targetLabel,
                 accentColor = hrColor,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                topContent = {
+                    HrZoneGauge(
+                        bpm = state.currentHeartRate,
+                        maxHr = state.athleteMaxHr,
+                        restingHr = state.athleteRestingHr,
+                        useKarvonenZones = state.useKarvonenZones,
+                        isDimmed = hrQualifier != null
+                    )
+                }
             )
         } else {
             BigMetricTile(
@@ -564,7 +574,8 @@ private fun BigMetricTile(
     target: String?,
     accentColor: Color,
     modifier: Modifier = Modifier,
-    targetColor: Color = Color.White.copy(alpha = 0.7f)
+    targetColor: Color = Color.White.copy(alpha = 0.7f),
+    topContent: @Composable (() -> Unit)? = null
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1E232A)),
@@ -576,6 +587,11 @@ private fun BigMetricTile(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF888888))
+
+            if (topContent != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                topContent()
+            }
 
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
