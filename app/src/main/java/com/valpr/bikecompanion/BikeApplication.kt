@@ -77,7 +77,10 @@ class BikeApplication : Application() {
         bike = com.valpr.bikecompanion.bike.ble.BleBikeConnection(
             context = applicationContext,
             bluetoothAdapter = bluetoothAdapter,
-            drivers = listOf(com.valpr.bikecompanion.bike.echelon.EchelonDriver())
+            drivers = listOf(
+                com.valpr.bikecompanion.bike.echelon.EchelonDriver(),
+                com.valpr.bikecompanion.bike.ftms.FtmsDriver()
+            )
         )
 
         workoutSessionManager = WorkoutSessionManager(

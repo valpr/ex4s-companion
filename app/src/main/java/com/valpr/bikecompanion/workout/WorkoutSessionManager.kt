@@ -114,7 +114,8 @@ class WorkoutSessionManager(
     private val ergController: ErgController = ErgController(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val isBikeConnected: () -> Boolean = { true },
-    capabilitiesFlow: StateFlow<BikeCapabilities> = MutableStateFlow(BikeCapabilities.DEFAULT_ECHELON)
+    capabilitiesFlow: StateFlow<BikeCapabilities> = MutableStateFlow(BikeCapabilities.DEFAULT_ECHELON),
+    private val onSetTargetPower: ((Int) -> Unit)? = null
 ) : WorkoutControlPort {
     constructor(
         bike: BikeController,
@@ -130,7 +131,8 @@ class WorkoutSessionManager(
         isBikeConnected = {
             bike.connectionState.value is BleConnectionState.Connected
         },
-        capabilitiesFlow = bike.capabilities
+        capabilitiesFlow = bike.capabilities,
+        onSetTargetPower = { bike.setTargetPower(it) }
     )
 
     private val _sessionState = MutableStateFlow(WorkoutSessionState())
@@ -370,7 +372,7 @@ class WorkoutSessionManager(
                     isCriticalHr = ergController.isCriticalHrActive
                 )
                 if (decision.shouldSendBleCommand) {
-                    onSetResistance(decision.targetResistance)
+                    dispatchBleCommand(decision, targetWatts)
                 }
                 _sessionState.update { it.copy(ergDecision = decision) }
             } else {
@@ -386,7 +388,7 @@ class WorkoutSessionManager(
         } else {
             val decision = ergController.suspendManually()
             if (decision.shouldSendBleCommand) {
-                onSetResistance(decision.targetResistance)
+                dispatchBleCommand(decision, null)
             }
             _sessionState.update { it.copy(ergDecision = decision) }
             _hapticAlerts.tryEmit(HapticAlertType.BAILOUT_TRIGGERED)
@@ -481,9 +483,9 @@ class WorkoutSessionManager(
                     _hapticAlerts.tryEmit(HapticAlertType.BAILOUT_TRIGGERED)
                 }
 
-                // Dispatch resistance to bike if needed
+                // Dispatch resistance or power to bike if needed
                 if (decision.shouldSendBleCommand) {
-                    onSetResistance(decision.targetResistance)
+                    dispatchBleCommand(decision, targetWatts)
                 }
 
                 // Record sample for graphs and summary
@@ -556,5 +558,23 @@ class WorkoutSessionManager(
             startTimeEpochMs = sessionStartEpochMs,
             workout = state.workout
         )
+    }
+
+    private fun dispatchBleCommand(decision: ErgDecision, targetWatts: Int?) {
+        val caps = _sessionState.value.bikeCapabilities
+        if (caps.supportsNativeErg && onSetTargetPower != null) {
+            val effectivePower = decision.effectiveTargetWatts ?: targetWatts
+            val commandedPower = when (decision.state) {
+                ErgState.MANUAL_BAILOUT, ErgState.CADENCE_FLOOR_BAILOUT -> RECOVERY_WATTS
+                else -> effectivePower ?: RECOVERY_WATTS
+            }
+            onSetTargetPower.invoke(commandedPower)
+        } else {
+            onSetResistance(decision.targetResistance)
+        }
+    }
+
+    companion object {
+        const val RECOVERY_WATTS = 50
     }
 }
