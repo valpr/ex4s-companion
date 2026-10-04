@@ -41,6 +41,7 @@ sealed interface ParseResult {
 interface BikeProtocol {
     val serviceUuid: UUID
     val notifyCharacteristics: List<UUID>
+    val indicateCharacteristics: List<UUID> get() = emptyList()
     val writeCharacteristic: UUID
     val capabilities: BikeCapabilities
     val resistanceModel: ResistanceModel?

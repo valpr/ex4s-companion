@@ -31,6 +31,7 @@ class CompanionHub(
 ) {
     private var lastSentMs: Long = 0L
     private var lastSnapshot: RemoteWorkoutSnapshot? = null
+    private var lastClutchCommandMs: Long = 0L
     private val providerJobs = mutableListOf<Job>()
 
     init {
@@ -80,7 +81,13 @@ class CompanionHub(
 
     private suspend fun dispatchRemoteCommand(command: RemoteCommand) {
         when (command) {
-            RemoteCommand.ToggleClutch -> workoutControl.toggleClutch()
+            RemoteCommand.ToggleClutch -> {
+                val now = clock()
+                if (now - lastClutchCommandMs >= CLUTCH_DEBOUNCE_MS) {
+                    lastClutchCommandMs = now
+                    workoutControl.toggleClutch()
+                }
+            }
             RemoteCommand.ResumeManually -> workoutControl.resumeManually()
             is RemoteCommand.AdjustIntensity -> workoutControl.adjustIntensity(command.deltaPercent)
             RemoteCommand.Pause -> workoutControl.pauseWorkout()
@@ -130,6 +137,8 @@ class CompanionHub(
     }
 
     companion object {
+        const val CLUTCH_DEBOUNCE_MS = 500L
+
         fun toSnapshot(state: WorkoutSessionState): RemoteWorkoutSnapshot {
             val telem = state.latestTelemetry
             val ergDecision = state.ergDecision

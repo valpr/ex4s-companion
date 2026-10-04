@@ -274,4 +274,41 @@ class CompanionHubTest {
 
         assertEquals(1, provider.sentSnapshots.size)
     }
+
+    @Test
+    fun remoteCommand_toggleClutch_debouncesRapidSuccessivePresses() = runTest {
+        val control = FakeWorkoutControl()
+        val provider = FakeCompanionProvider()
+        val sessionState = MutableStateFlow(WorkoutSessionState())
+        val haptics = MutableSharedFlow<HapticAlertType>(extraBufferCapacity = 16)
+        var currentClock = 1000L
+
+        CompanionHub(
+            providers = listOf(provider),
+            workoutControl = control,
+            sessionState = sessionState,
+            hapticAlerts = haptics,
+            scope = hubScope,
+            clock = { currentClock }
+        )
+
+        hubScope.runCurrent()
+
+        // First press at 1000ms: dispatched
+        provider.remoteCommands.emit(RemoteCommand.ToggleClutch)
+        hubScope.runCurrent()
+        assertEquals(1, control.clutchToggleCount)
+
+        // Rapid duplicate press at 1100ms (< 500ms debounce): dropped
+        currentClock += 100L
+        provider.remoteCommands.emit(RemoteCommand.ToggleClutch)
+        hubScope.runCurrent()
+        assertEquals(1, control.clutchToggleCount)
+
+        // Press at 1600ms (>= 500ms since last accepted command): dispatched
+        currentClock += 500L
+        provider.remoteCommands.emit(RemoteCommand.ToggleClutch)
+        hubScope.runCurrent()
+        assertEquals(2, control.clutchToggleCount)
+    }
 }

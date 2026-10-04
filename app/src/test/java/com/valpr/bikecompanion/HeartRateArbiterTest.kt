@@ -159,4 +159,36 @@ class HeartRateArbiterTest {
         assertEquals(155, arbiter.currentBpm.value)
         assertEquals(155, lastBpm)
     }
+
+    @Test
+    fun multiSource_higherPrioritySourcePreemptsActiveSecondarySource() = runTest {
+        var currentClock = 10_000L
+        var lastBpm = 0
+
+        val primary = FakeHrSource("strap", "Chest Strap")
+        val secondary = FakeHrSource("watch", "Pixel Watch")
+        val arbiter = HeartRateArbiter(
+            sources = listOf(primary, secondary),
+            onUpdateHeartRate = { lastBpm = it },
+            scope = arbiterScope,
+            clock = { currentClock }
+        )
+
+        // Secondary starts first and emits sample
+        secondary.hrStatus.value = HrStatus.CONNECTED
+        secondary.hrSample.value = HrSample(bpm = 140, timestampEpochMs = currentClock)
+        arbiterScope.runCurrent()
+
+        assertEquals(secondary, arbiter.activeSource.value)
+        assertEquals(140, lastBpm)
+
+        // Primary connects and emits sample -> immediately preempts secondary
+        primary.hrStatus.value = HrStatus.CONNECTED
+        primary.hrSample.value = HrSample(bpm = 155, timestampEpochMs = currentClock)
+        arbiterScope.runCurrent()
+
+        assertEquals(primary, arbiter.activeSource.value)
+        assertEquals(155, arbiter.currentBpm.value)
+        assertEquals(155, lastBpm)
+    }
 }

@@ -72,6 +72,7 @@ open class BleBikeConnection(
     private var activeProtocol: BikeProtocol = drivers.first().createProtocol()
     private var writeCharacteristic: BluetoothGattCharacteristic? = null
     private val notifyCharacteristics = mutableMapOf<UUID, BluetoothGattCharacteristic>()
+    private val indicateCharacteristics = mutableMapOf<UUID, BluetoothGattCharacteristic>()
 
     private var pollJob: Job? = null
     private var scanCallback: ScanCallback? = null
@@ -395,6 +396,7 @@ open class BleBikeConnection(
         activeGatt = null
         writeCharacteristic = null
         notifyCharacteristics.clear()
+        indicateCharacteristics.clear()
 
         if (cleanState) {
             _connectionState.value = BleConnectionState.Disconnected
@@ -485,6 +487,12 @@ open class BleBikeConnection(
                     notifyCharacteristics[uuid] = it
                 }
             }
+            indicateCharacteristics.clear()
+            for (uuid in activeProtocol.indicateCharacteristics) {
+                primaryService.getCharacteristic(uuid)?.let {
+                    indicateCharacteristics[uuid] = it
+                }
+            }
 
             if (writeCharacteristic == null || notifyCharacteristics.isEmpty()) {
                 Log.e(TAG, "One or more required characteristics missing")
@@ -531,7 +539,7 @@ open class BleBikeConnection(
     private suspend fun setupNotificationsAndHandshake(gatt: BluetoothGatt) {
         _connectionState.value = BleConnectionState.Handshaking
 
-        // 1. Enable local notifications and CCCD writes for all notify characteristics
+        // 1a. Enable local notifications and CCCD writes for all notify characteristics
         for ((_, characteristic) in notifyCharacteristics) {
             gatt.setCharacteristicNotification(characteristic, true)
             val cccd = characteristic.getDescriptor(EchelonGattAttributes.CLIENT_CHARACTERISTIC_CONFIG)
@@ -540,7 +548,22 @@ open class BleBikeConnection(
                     BleCommand.WriteDescriptor(
                         descriptor = cccd,
                         data = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE,
-                        description = "Enable CCCD ${characteristic.uuid}"
+                        description = "Enable CCCD notification ${characteristic.uuid}"
+                    )
+                )
+            }
+        }
+
+        // 1b. Enable local indications and CCCD writes for all indicate characteristics (e.g. FTMS Control Point)
+        for ((_, characteristic) in indicateCharacteristics) {
+            gatt.setCharacteristicNotification(characteristic, true)
+            val cccd = characteristic.getDescriptor(EchelonGattAttributes.CLIENT_CHARACTERISTIC_CONFIG)
+            if (cccd != null) {
+                commandQueue.enqueue(
+                    BleCommand.WriteDescriptor(
+                        descriptor = cccd,
+                        data = BluetoothGattDescriptor.ENABLE_INDICATION_VALUE,
+                        description = "Enable CCCD indication ${characteristic.uuid}"
                     )
                 )
             }
@@ -599,11 +622,13 @@ open class BleBikeConnection(
 
                     if (holdLast) {
                         _telemetry.update { current ->
-                            // Update elapsed/distance but hold cadence & watts
+                            // Update elapsed/distance but hold cadence (and table watts on Echelon)
                             val updated = result.update(current)
                             current.copy(
                                 elapsedSeconds = updated.elapsedSeconds,
                                 distanceKm = updated.distanceKm,
+                                estimatedWatts = if (activeProtocol.capabilities.reportsMeasuredPower) updated.estimatedWatts else current.estimatedWatts,
+                                resistanceLevel = updated.resistanceLevel,
                                 lastUpdateTimestampMs = System.currentTimeMillis()
                             )
                         }

@@ -17,6 +17,7 @@ class FtmsBikeProtocolTest {
         assertEquals(UUID.fromString("00001826-0000-1000-8000-00805f9b34fb"), protocol.serviceUuid)
         assertEquals(FtmsBikeProtocol.CONTROL_POINT_UUID, protocol.writeCharacteristic)
         assertTrue(protocol.notifyCharacteristics.contains(FtmsBikeProtocol.INDOOR_BIKE_DATA_UUID))
+        assertTrue(protocol.indicateCharacteristics.contains(FtmsBikeProtocol.CONTROL_POINT_UUID))
         assertTrue(protocol.capabilities.supportsNativeErg)
         assertTrue(protocol.capabilities.reportsMeasuredPower)
     }

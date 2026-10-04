@@ -48,6 +48,9 @@ class FtmsBikeProtocol(
         INDOOR_BIKE_DATA_UUID,
         FITNESS_MACHINE_STATUS_UUID
     )
+    override val indicateCharacteristics: List<UUID> = listOf(
+        CONTROL_POINT_UUID
+    )
     override val writeCharacteristic: UUID = CONTROL_POINT_UUID
     override val resistanceModel: ResistanceModel? = null
 
