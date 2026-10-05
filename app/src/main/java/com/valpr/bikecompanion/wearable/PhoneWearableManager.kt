@@ -517,7 +517,7 @@ class PhoneWearableManager(
         if (targetNodeId.isBlank()) return
 
         val statusCode = when (snapshot.status) {
-            SessionStatus.IDLE -> WorkoutStateMessage.STATUS_IDLE
+            SessionStatus.IDLE, SessionStatus.STARTING -> WorkoutStateMessage.STATUS_IDLE
             SessionStatus.RUNNING -> WorkoutStateMessage.STATUS_RUNNING
             SessionStatus.PAUSED -> WorkoutStateMessage.STATUS_PAUSED
             SessionStatus.COMPLETED -> WorkoutStateMessage.STATUS_COMPLETED
@@ -600,7 +600,7 @@ class PhoneWearableManager(
                 val targetNodeId = _watchState.value.nodeId
 
                 val statusCode = when (session.status) {
-                    SessionStatus.IDLE -> WorkoutStateMessage.STATUS_IDLE
+                    SessionStatus.IDLE, SessionStatus.STARTING -> WorkoutStateMessage.STATUS_IDLE
                     SessionStatus.RUNNING -> WorkoutStateMessage.STATUS_RUNNING
                     SessionStatus.PAUSED -> WorkoutStateMessage.STATUS_PAUSED
                     SessionStatus.COMPLETED -> WorkoutStateMessage.STATUS_COMPLETED

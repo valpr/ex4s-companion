@@ -516,4 +516,37 @@ class PhoneWearableManagerTest {
         assertEquals(HapticAlertType.CRITICAL_HR_WARNING, parsed)
         manager.onDestroy()
     }
+
+    @Test
+    fun sendSnapshot_startingStatus_mapsToStatusIdle() = runTest {
+        val manager = createManager()
+        managerScope.runCurrent()
+        manager.updateWatchNode(mockNode("watch-456", "My Watch"))
+        sentMessages.clear()
+
+        val snapshot = RemoteWorkoutSnapshot(
+            status = SessionStatus.STARTING,
+            elapsedSeconds = 0,
+            totalSeconds = 600,
+            currentWatts = 0,
+            targetWatts = 200,
+            cadenceRpm = 0,
+            targetCadenceRpm = 85,
+            resistanceLevel = 10,
+            heartRateBpm = 0,
+            isBailoutActive = false,
+            isCadenceFloorActive = false,
+            isHrCapped = false,
+            workoutName = "Countdown Ride"
+        )
+
+        manager.sendSnapshot(snapshot)
+        managerScope.runCurrent()
+
+        assertEquals(1, sentMessages.size)
+        val parsed = WorkoutStateMessage.fromByteArray(sentMessages[0].data)
+        assertNotNull(parsed)
+        assertEquals(WorkoutStateMessage.STATUS_IDLE, parsed!!.sessionStatus)
+        manager.onDestroy()
+    }
 }

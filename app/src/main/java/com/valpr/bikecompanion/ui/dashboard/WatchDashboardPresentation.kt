@@ -75,8 +75,8 @@ object WatchDashboardPresentation {
             )
         }
 
-        // Standby: optical sensor is dormant while IDLE or COMPLETED.
-        if (sessionStatus == SessionStatus.IDLE || sessionStatus == SessionStatus.COMPLETED) {
+        // Standby: optical sensor is dormant while IDLE, COMPLETED, or STARTING.
+        if (sessionStatus == SessionStatus.IDLE || sessionStatus == SessionStatus.COMPLETED || sessionStatus == SessionStatus.STARTING) {
             val statusText = watchState.pingStatusMessage ?: "Ready • Standby"
             val tone = if (watchState.pingStatusMessage?.startsWith("Verified") == true) {
                 WatchStatusTone.LIVE

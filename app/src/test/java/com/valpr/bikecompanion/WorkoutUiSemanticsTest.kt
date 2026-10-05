@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -34,6 +35,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestScope
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -926,5 +928,71 @@ class WorkoutUiSemanticsTest {
 
         composeRule.onNodeWithTag("active_workout_content").assertDoesNotExist()
         composeRule.onNodeWithTag("pip_content").assertIsDisplayed()
+    }
+
+    @Test
+    fun countdownOverlay_displaysSecondsAndButtons() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkoutWithCountdown(structuredWorkout(), countdownSeconds = 3)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {})
+        }
+
+        composeRule.onNodeWithTag("workout_countdown_overlay").assertIsDisplayed()
+        composeRule.onNodeWithTag("countdown_seconds_text").assertTextEquals("3")
+        composeRule.onNodeWithTag("countdown_skip_button").assertIsDisplayed()
+        composeRule.onNodeWithTag("countdown_cancel_button").assertIsDisplayed()
+        composeRule.onNodeWithText("GET READY").assertIsDisplayed()
+        composeRule.onNodeWithTag("countdown_title_text").assertTextEquals("Semantics")
+        composeRule.onNodeWithTag("countdown_target_watts").assertIsDisplayed()
+    }
+
+    @Test
+    fun countdownOverlay_skipButton_dismissesOverlayAndStartsWorkout() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkoutWithCountdown(structuredWorkout(), countdownSeconds = 3)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {})
+        }
+
+        composeRule.onNodeWithTag("countdown_skip_button").performClick()
+
+        assertEquals(SessionStatus.RUNNING, manager.sessionState.value.status)
+        composeRule.onNodeWithTag("workout_countdown_overlay").assertDoesNotExist()
+    }
+
+    @Test
+    fun countdownOverlay_cancelButton_resetsToIdle() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkoutWithCountdown(structuredWorkout(), countdownSeconds = 3)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {})
+        }
+
+        composeRule.onNodeWithTag("countdown_cancel_button").performClick()
+
+        assertEquals(SessionStatus.IDLE, manager.sessionState.value.status)
+        composeRule.onNodeWithTag("workout_countdown_overlay").assertDoesNotExist()
+    }
+
+    @Test
+    fun countdownOverlay_freeRide_displaysFreeRideTitle() {
+        val manager = createManager()
+        managerScope.testScheduler.advanceUntilIdle()
+        manager.startWorkoutWithCountdown(null, countdownSeconds = 3)
+
+        composeRule.setContent {
+            ActiveWorkoutScreen(sessionManager = manager, onFinish = {})
+        }
+
+        composeRule.onNodeWithTag("workout_countdown_overlay").assertIsDisplayed()
+        composeRule.onNodeWithTag("countdown_title_text").assertTextEquals("Free Ride")
+        composeRule.onNodeWithTag("countdown_target_watts").assertDoesNotExist()
     }
 }

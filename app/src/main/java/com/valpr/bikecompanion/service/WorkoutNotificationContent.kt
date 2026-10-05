@@ -18,6 +18,11 @@ object WorkoutNotificationContent {
         val telem = session.latestTelemetry
         val watts = session.displayWattsOrRaw
         return when {
+            session.status == SessionStatus.STARTING -> {
+                val countdown = session.countdownSeconds ?: 3
+                val workoutName = session.workout?.name ?: "Free Ride"
+                "$workoutName: Starting in ${countdown}s..."
+            }
             session.status == SessionStatus.RUNNING -> {
                 val workoutName = session.workout?.name ?: "Free Ride"
                 val targetStr = session.targetWatts?.let { " (Target ${it}W)" } ?: ""
@@ -49,7 +54,7 @@ object WorkoutNotificationContent {
      * all freeze or advance it deliberately). The bike telemetry clock is only
      * a fallback for IDLE, where no session time exists.
      */
-    fun selectedTime(session: WorkoutSessionState): String = if (session.status == SessionStatus.IDLE) {
+    fun selectedTime(session: WorkoutSessionState): String = if (session.status == SessionStatus.IDLE || session.status == SessionStatus.STARTING) {
         session.latestTelemetry.formattedElapsedTime
     } else {
         session.formattedElapsedTime

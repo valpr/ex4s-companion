@@ -130,6 +130,15 @@ fun MainNavigation(
         currentScreen = AppScreen.WORKOUT_SUMMARY
     }
 
+    // If session is reset to IDLE while on ACTIVE_WORKOUT (e.g. countdown cancelled),
+    // cleanly tear down tracking service and return to dashboard.
+    if (sessionState.status == SessionStatus.IDLE &&
+        currentScreen == AppScreen.ACTIVE_WORKOUT
+    ) {
+        WorkoutTrackingService.stopService(context)
+        currentScreen = AppScreen.DASHBOARD
+    }
+
     when (currentScreen) {
         AppScreen.DASHBOARD -> {
             val dashboardVm: DashboardViewModel = viewModel()

@@ -443,4 +443,128 @@ class WorkoutSessionManagerTest {
         assertEquals(SessionStatus.IDLE, offlineManager.sessionState.value.status)
         assertTrue(dispatchedResistance.isEmpty())
     }
+
+    @Test
+    fun startWorkout_withCountdown_entersStartingState() = runTest {
+        val manager = createManager()
+        settleManager()
+        val workout = Workout(
+            name = "Test Structured",
+            segments = listOf(WorkoutSegment.SteadyState(durationSeconds = 300, power = 0.9f))
+        )
+
+        val result = manager.startWorkoutWithCountdown(workout)
+        assertTrue(result.isSuccess)
+
+        val state = manager.sessionState.value
+        assertEquals(SessionStatus.STARTING, state.status)
+        assertEquals(3, state.countdownSeconds)
+        assertEquals(0, state.elapsedSeconds)
+        assertEquals(300, state.totalSeconds)
+        assertEquals(180, state.targetWatts) // 200W FTP * 0.9 = 180W previewed
+        assertTrue(dispatchedResistance.isEmpty()) // No BLE writes during countdown
+    }
+
+    @Test
+    fun countdown_ticksDownAndTransitionsToRunning() = runTest {
+        val manager = createManager()
+        settleManager()
+        val workout = Workout(
+            name = "Test Structured",
+            segments = listOf(WorkoutSegment.SteadyState(durationSeconds = 300, power = 0.9f))
+        )
+
+        manager.startWorkoutWithCountdown(workout, countdownSeconds = 3)
+        assertEquals(3, manager.sessionState.value.countdownSeconds)
+        assertEquals(SessionStatus.STARTING, manager.sessionState.value.status)
+
+        managerTime(1000L)
+        assertEquals(2, manager.sessionState.value.countdownSeconds)
+        assertEquals(SessionStatus.STARTING, manager.sessionState.value.status)
+
+        managerTime(1000L)
+        assertEquals(1, manager.sessionState.value.countdownSeconds)
+        assertEquals(SessionStatus.STARTING, manager.sessionState.value.status)
+
+        managerTime(1000L)
+        assertEquals(null, manager.sessionState.value.countdownSeconds)
+        assertEquals(SessionStatus.RUNNING, manager.sessionState.value.status)
+        assertEquals(0, manager.sessionState.value.elapsedSeconds)
+
+        // Session loop ticks now
+        managerTime(1000L)
+        assertEquals(1, manager.sessionState.value.elapsedSeconds)
+    }
+
+    @Test
+    fun skipCountdown_immediatelyEntersRunning() = runTest {
+        val manager = createManager()
+        settleManager()
+        val workout = Workout(
+            name = "Test Structured",
+            segments = listOf(WorkoutSegment.SteadyState(durationSeconds = 300, power = 0.9f))
+        )
+
+        manager.startWorkoutWithCountdown(workout, countdownSeconds = 3)
+        assertEquals(SessionStatus.STARTING, manager.sessionState.value.status)
+
+        manager.skipCountdown()
+        assertEquals(SessionStatus.RUNNING, manager.sessionState.value.status)
+        assertEquals(null, manager.sessionState.value.countdownSeconds)
+        assertEquals(0, manager.sessionState.value.elapsedSeconds)
+
+        managerTime(1000L)
+        assertEquals(1, manager.sessionState.value.elapsedSeconds)
+    }
+
+    @Test
+    fun cancelCountdown_resetsToIdle() = runTest {
+        val manager = createManager()
+        settleManager()
+        val workout = Workout(
+            name = "Test Structured",
+            segments = listOf(WorkoutSegment.SteadyState(durationSeconds = 300, power = 0.9f))
+        )
+
+        manager.startWorkoutWithCountdown(workout, countdownSeconds = 3)
+        assertEquals(SessionStatus.STARTING, manager.sessionState.value.status)
+
+        manager.cancelCountdown()
+        assertEquals(SessionStatus.IDLE, manager.sessionState.value.status)
+        assertEquals(null, manager.sessionState.value.workout)
+        assertEquals(null, manager.sessionState.value.countdownSeconds)
+        assertEquals(null, manager.sessionState.value.summary)
+    }
+
+    @Test
+    fun stopWorkout_duringCountdown_cancelsAndResetsToIdleWithoutSummary() = runTest {
+        val manager = createManager()
+        settleManager()
+        val workout = Workout(
+            name = "Test Structured",
+            segments = listOf(WorkoutSegment.SteadyState(durationSeconds = 300, power = 0.9f))
+        )
+
+        manager.startWorkoutWithCountdown(workout, countdownSeconds = 3)
+        manager.stopWorkout()
+
+        assertEquals(SessionStatus.IDLE, manager.sessionState.value.status)
+        assertEquals(null, manager.sessionState.value.summary)
+    }
+
+    @Test
+    fun freeRide_startWithCountdown_progressesCleanly() = runTest {
+        val manager = createManager()
+        settleManager()
+
+        manager.startWorkoutWithCountdown(null, countdownSeconds = 3)
+        assertEquals(SessionStatus.STARTING, manager.sessionState.value.status)
+        assertEquals(3, manager.sessionState.value.countdownSeconds)
+        assertEquals(null, manager.sessionState.value.workout)
+        assertEquals(null, manager.sessionState.value.targetWatts)
+
+        managerTime(3000L)
+        assertEquals(SessionStatus.RUNNING, manager.sessionState.value.status)
+        assertEquals(null, manager.sessionState.value.countdownSeconds)
+    }
 }

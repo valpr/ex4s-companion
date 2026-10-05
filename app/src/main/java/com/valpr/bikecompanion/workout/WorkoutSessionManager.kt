@@ -30,6 +30,7 @@ import kotlin.math.roundToInt
 
 enum class SessionStatus {
     IDLE,
+    STARTING,
     RUNNING,
     PAUSED,
     COMPLETED
@@ -66,6 +67,7 @@ data class WorkoutSummary(
 
 data class WorkoutSessionState(
     val status: SessionStatus = SessionStatus.IDLE,
+    val countdownSeconds: Int? = null,
     val workout: Workout? = null,
     /** Original `.zwo` library filename (null for Free Ride). Feeds history attribution. */
     val sourceWorkoutFilename: String? = null,
@@ -159,6 +161,7 @@ class WorkoutSessionManager(
     val hapticAlerts: SharedFlow<HapticAlertType> = _hapticAlerts.asSharedFlow()
 
     private var sessionJob: Job? = null
+    private var countdownJob: Job? = null
     private var profileJob: Job? = null
     private val recordedSamples = mutableListOf<WorkoutMetricSample>()
     private var athleteFtp: Int = 200
@@ -292,8 +295,14 @@ class WorkoutSessionManager(
      * Returns failure instead of silently falling back to a phantom 200W target.
      * @param sourceFilename original `.zwo` library filename for history attribution
      * (null for Free Ride or unknown sources).
+     * @param countdownSeconds countdown duration in seconds before session begins ticking.
+     * Defaults to 0 for instant start (backward compatible with tests and headless callers).
      */
-    fun startWorkout(workout: Workout?, sourceFilename: String? = null): Result<Unit> {
+    fun startWorkout(
+        workout: Workout?,
+        sourceFilename: String? = null,
+        countdownSeconds: Int = 0
+    ): Result<Unit> {
         if (!isBikeConnected()) {
             return Result.failure(IllegalStateException("Bike not connected"))
         }
@@ -301,6 +310,7 @@ class WorkoutSessionManager(
             return Result.failure(IllegalStateException("FTP required for structured workouts"))
         }
         stopSessionLoop()
+        stopCountdownJob()
         recordedSamples.clear()
         ergController.reset()
         powerSmoother.reset()
@@ -319,29 +329,122 @@ class WorkoutSessionManager(
         }
         ergController.isCriticalHrActive = reEvaluatedCritical
 
-        _sessionState.update {
-            WorkoutSessionState(
-                status = SessionStatus.RUNNING,
-                workout = workout,
-                sourceWorkoutFilename = sourceFilename,
-                elapsedSeconds = 0,
-                totalSeconds = totalDuration,
-                intensityScale = 1.0f,
-                latestTelemetry = it.latestTelemetry,
-                displayWatts = powerSmoother.value,
-                currentHeartRate = it.currentHeartRate,
-                isCriticalHrActive = reEvaluatedCritical,
-                athleteMaxHr = it.athleteMaxHr,
-                athleteRestingHr = it.athleteRestingHr,
-                useKarvonenZones = it.useKarvonenZones,
-                athletePreferredCadence = it.athletePreferredCadence,
-                bikeCapabilities = it.bikeCapabilities,
-                summary = null
-            )
+        val initialPosition = workout?.getSegmentAtTime(0)
+        val initialTargetWatts = workout?.targetWattsAt(athleteFtp, 0, 1.0f)
+        val initialTargetCadence = workout?.targetCadenceAt(0)
+        val initialCues = workout?.activeTextEventsAt(0) ?: emptyList()
+
+        if (countdownSeconds > 0) {
+            _sessionState.update {
+                WorkoutSessionState(
+                    status = SessionStatus.STARTING,
+                    countdownSeconds = countdownSeconds,
+                    workout = workout,
+                    sourceWorkoutFilename = sourceFilename,
+                    elapsedSeconds = 0,
+                    totalSeconds = totalDuration,
+                    targetWatts = initialTargetWatts,
+                    targetCadence = initialTargetCadence,
+                    currentPosition = initialPosition,
+                    activeCues = initialCues,
+                    intensityScale = 1.0f,
+                    latestTelemetry = it.latestTelemetry,
+                    displayWatts = powerSmoother.value,
+                    currentHeartRate = it.currentHeartRate,
+                    isCriticalHrActive = reEvaluatedCritical,
+                    athleteMaxHr = it.athleteMaxHr,
+                    athleteRestingHr = it.athleteRestingHr,
+                    useKarvonenZones = it.useKarvonenZones,
+                    athletePreferredCadence = it.athletePreferredCadence,
+                    bikeCapabilities = it.bikeCapabilities,
+                    summary = null
+                )
+            }
+            startCountdown(countdownSeconds)
+        } else {
+            _sessionState.update {
+                WorkoutSessionState(
+                    status = SessionStatus.RUNNING,
+                    countdownSeconds = null,
+                    workout = workout,
+                    sourceWorkoutFilename = sourceFilename,
+                    elapsedSeconds = 0,
+                    totalSeconds = totalDuration,
+                    intensityScale = 1.0f,
+                    latestTelemetry = it.latestTelemetry,
+                    displayWatts = powerSmoother.value,
+                    currentHeartRate = it.currentHeartRate,
+                    isCriticalHrActive = reEvaluatedCritical,
+                    athleteMaxHr = it.athleteMaxHr,
+                    athleteRestingHr = it.athleteRestingHr,
+                    useKarvonenZones = it.useKarvonenZones,
+                    athletePreferredCadence = it.athletePreferredCadence,
+                    bikeCapabilities = it.bikeCapabilities,
+                    summary = null
+                )
+            }
+            startSessionLoop()
         }
 
-        startSessionLoop()
         return Result.success(Unit)
+    }
+
+    /**
+     * Starts a workout with the standard countdown (default 3 seconds).
+     */
+    fun startWorkoutWithCountdown(
+        workout: Workout?,
+        sourceFilename: String? = null,
+        countdownSeconds: Int = DEFAULT_COUNTDOWN_SECONDS
+    ): Result<Unit> = startWorkout(workout, sourceFilename, countdownSeconds)
+
+    private fun startCountdown(totalSeconds: Int) {
+        stopCountdownJob()
+        countdownJob = scope.launch {
+            for (second in totalSeconds downTo 1) {
+                _sessionState.update { it.copy(countdownSeconds = second) }
+                delay(1000L)
+            }
+            onCountdownFinished()
+        }
+    }
+
+    private fun onCountdownFinished() {
+        countdownJob = null
+        sessionStartEpochMs = System.currentTimeMillis()
+        _sessionState.update {
+            it.copy(
+                status = SessionStatus.RUNNING,
+                countdownSeconds = null
+            )
+        }
+        startSessionLoop()
+    }
+
+    fun skipCountdown() {
+        if (_sessionState.value.status == SessionStatus.STARTING) {
+            stopCountdownJob()
+            sessionStartEpochMs = System.currentTimeMillis()
+            _sessionState.update {
+                it.copy(
+                    status = SessionStatus.RUNNING,
+                    countdownSeconds = null
+                )
+            }
+            startSessionLoop()
+        }
+    }
+
+    fun cancelCountdown() {
+        if (_sessionState.value.status == SessionStatus.STARTING) {
+            stopCountdownJob()
+            resetToIdle()
+        }
+    }
+
+    private fun stopCountdownJob() {
+        countdownJob?.cancel()
+        countdownJob = null
     }
 
     override fun pauseWorkout() {
@@ -428,6 +531,11 @@ class WorkoutSessionManager(
         if (currentState.status == SessionStatus.IDLE || currentState.status == SessionStatus.COMPLETED) {
             return
         }
+        if (currentState.status == SessionStatus.STARTING) {
+            cancelCountdown()
+            return
+        }
+        stopCountdownJob()
         stopSessionLoop()
         val summary = generateSummary(currentState)
         _sessionState.update {
@@ -440,6 +548,7 @@ class WorkoutSessionManager(
     }
 
     fun resetToIdle() {
+        stopCountdownJob()
         stopSessionLoop()
         pauseOdometerSnapshotKm = 0.0
         pausedDistanceKm = 0.0
@@ -599,6 +708,7 @@ class WorkoutSessionManager(
     }
 
     companion object {
+        const val DEFAULT_COUNTDOWN_SECONDS = 3
         const val RECOVERY_WATTS = 50
     }
 }

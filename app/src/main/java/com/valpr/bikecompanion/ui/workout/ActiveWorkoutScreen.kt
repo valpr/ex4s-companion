@@ -136,6 +136,16 @@ fun ActiveWorkoutScreen(
                         onEnterPip = onEnterPip
                     )
                 }
+
+                if (sessionState.status == SessionStatus.STARTING && sessionState.countdownSeconds != null) {
+                    WorkoutCountdownOverlay(
+                        countdownSeconds = sessionState.countdownSeconds ?: 3,
+                        workoutName = sessionState.workout?.name ?: "Free Ride",
+                        targetWatts = sessionState.targetWatts,
+                        onSkip = { sessionManager.skipCountdown() },
+                        onCancel = { sessionManager.cancelCountdown() }
+                    )
+                }
             }
         }
     }

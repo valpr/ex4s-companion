@@ -241,7 +241,7 @@ fun DashboardScreen(
                             showFtpPromptDialog = false
                             pendingWorkoutToStart?.let { (workout, filename) ->
                                 viewModel.refreshWatchConnection()
-                                val result = viewModel.sessionManager.startWorkout(workout, filename)
+                                val result = viewModel.sessionManager.startWorkoutWithCountdown(workout, filename)
                                 if (result.isSuccess) {
                                     pendingWorkoutToStart = null
                                     onStartWorkout()
@@ -368,7 +368,7 @@ fun DashboardScreen(
                             showFtpPromptDialog = true
                         } else {
                             viewModel.refreshWatchConnection()
-                            val result = viewModel.sessionManager.startWorkout(workout, filename)
+                            val result = viewModel.sessionManager.startWorkoutWithCountdown(workout, filename)
                             if (result.isSuccess) {
                                 onStartWorkout()
                             }
@@ -421,7 +421,8 @@ fun DashboardScreen(
                         profiles = profiles,
                         activeProfile = activeProfile,
                         sessionBlocked = sessionState.status == SessionStatus.RUNNING ||
-                            sessionState.status == SessionStatus.PAUSED,
+                            sessionState.status == SessionStatus.PAUSED ||
+                            sessionState.status == SessionStatus.STARTING,
                         onSwitch = { viewModel.switchProfile(it) },
                         onCreate = { name, color -> viewModel.createProfile(name, color) },
                         onRename = { id, name -> viewModel.renameProfile(id, name) },
@@ -490,8 +491,11 @@ fun DashboardScreen(
                 )
             }
 
-            // Active Session in Progress Banner (if active or paused)
-            if (sessionState.status == SessionStatus.RUNNING || sessionState.status == SessionStatus.PAUSED) {
+            // Active Session in Progress Banner (if active, paused, or starting)
+            if (sessionState.status == SessionStatus.RUNNING ||
+                sessionState.status == SessionStatus.PAUSED ||
+                sessionState.status == SessionStatus.STARTING
+            ) {
                 item {
                     ActiveWorkoutCard(
                         sessionState = sessionState,
@@ -519,7 +523,7 @@ fun DashboardScreen(
                     enabled = isBikeConnected,
                     onStartFreeRide = {
                         viewModel.refreshWatchConnection()
-                        val result = viewModel.sessionManager.startWorkout(null)
+                        val result = viewModel.sessionManager.startWorkoutWithCountdown(null)
                         if (result.isSuccess) {
                             onStartWorkout()
                         }
@@ -1538,11 +1542,18 @@ internal fun DeleteWorkoutDialog(
 @Composable
 internal fun ActiveWorkoutCard(sessionState: WorkoutSessionState, onResume: () -> Unit, onStop: () -> Unit) {
     val isPaused = sessionState.status == SessionStatus.PAUSED
+    val isStarting = sessionState.status == SessionStatus.STARTING
     val telem = sessionState.latestTelemetry
     val workoutName = sessionState.workout?.name ?: "Free Ride"
 
+    val cardColor = when {
+        isPaused -> Color(0xFF263238)
+        isStarting -> Color(0xFF1E2638)
+        else -> Color(0xFF003822)
+    }
+
     Card(
-        colors = CardDefaults.cardColors(containerColor = if (isPaused) Color(0xFF263238) else Color(0xFF003822)),
+        colors = CardDefaults.cardColors(containerColor = cardColor),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -1567,7 +1578,11 @@ internal fun ActiveWorkoutCard(sessionState: WorkoutSessionState, onResume: () -
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        if (isPaused) "WORKOUT PAUSED" else "WORKOUT IN PROGRESS",
+                        when {
+                            isPaused -> "WORKOUT PAUSED"
+                            isStarting -> "STARTING IN ${sessionState.countdownSeconds ?: 3}S"
+                            else -> "WORKOUT IN PROGRESS"
+                        },
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (isPaused) Color(0xFFFFB300) else Color(0xFF00E676),

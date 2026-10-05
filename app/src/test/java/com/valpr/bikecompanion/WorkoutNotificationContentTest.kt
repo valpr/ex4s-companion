@@ -202,4 +202,25 @@ class WorkoutNotificationContentTest {
             WorkoutNotificationContent.buildContent(bailout)
         )
     }
+
+    @Test
+    fun starting_showsStartingInCountdownSeconds() {
+        val s = WorkoutSessionState(
+            status = SessionStatus.STARTING,
+            countdownSeconds = 3,
+            workout = Workout(name = "Sweet Spot", segments = listOf(WorkoutSegment.SteadyState(600, 0.9f)))
+        )
+        val title = WorkoutNotificationContent.buildTitle(s, BleConnectionState.Connected("EX-4S", "AA:BB:CC:DD:EE:FF"))
+        assertEquals("Sweet Spot: Starting in 3s...", title)
+
+        val freeRide = WorkoutSessionState(
+            status = SessionStatus.STARTING,
+            countdownSeconds = 2,
+            workout = null
+        )
+        val freeRideTitle = WorkoutNotificationContent.buildTitle(freeRide, BleConnectionState.Connected("EX-4S", "AA:BB:CC:DD:EE:FF"))
+        assertEquals("Free Ride: Starting in 2s...", freeRideTitle)
+
+        assertEquals("00:00", WorkoutNotificationContent.selectedTime(s))
+    }
 }
