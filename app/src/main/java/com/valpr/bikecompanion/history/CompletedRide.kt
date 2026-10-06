@@ -67,7 +67,9 @@ data class RideHeader(
     val totalWorkKj: Double = 0.0,
     val totalCaloriesKcal: Int = 0,
     /** Schema version of this record. Files written before versioning decode as 0. */
-    val schemaVersion: Int = 0
+    val schemaVersion: Int = 0,
+    /** True once a Health Connect batch write for this ride reported Success. */
+    val healthSynced: Boolean = false
 )
 
 /**
@@ -91,7 +93,9 @@ data class CompletedRide(
     val totalCaloriesKcal: Int = 0,
     val samples: List<StoredSample> = emptyList(),
     /** Schema version of this record. Files written before versioning decode as 0. */
-    val schemaVersion: Int = 0
+    val schemaVersion: Int = 0,
+    /** True once a Health Connect batch write for this ride reported Success. */
+    val healthSynced: Boolean = false
 ) {
     fun header() = RideHeader(
         id = id,
@@ -108,7 +112,8 @@ data class CompletedRide(
         maxHeartRate = maxHeartRate,
         totalWorkKj = totalWorkKj,
         totalCaloriesKcal = totalCaloriesKcal,
-        schemaVersion = schemaVersion
+        schemaVersion = schemaVersion,
+        healthSynced = healthSynced
     )
 
     fun toSummary() = WorkoutSummary(
@@ -129,7 +134,7 @@ data class CompletedRide(
 
     companion object {
         /** Current JSON schema version for [CompletedRide] and [RideHeader]. */
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
 
         fun rideIdFor(startTimeEpochMs: Long): String = "ride_$startTimeEpochMs"
 

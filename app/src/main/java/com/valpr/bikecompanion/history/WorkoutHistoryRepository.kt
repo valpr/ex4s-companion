@@ -118,6 +118,35 @@ class WorkoutHistoryRepository(private val historyDirectory: File) {
         return removed
     }
 
+    /**
+     * Marks a ride's Health Connect upload badge. Updates both the full file
+     * (source of truth) and the header index so list rows reflect it without
+     * re-parsing samples. No-op when the ride file is missing.
+     */
+    fun markHealthSynced(id: String, synced: Boolean) = synchronized(lock) {
+        val safeId = ProfilePaths.sanitizeRideId(id)
+        val file = File(historyDirectory, "$safeId.json")
+        if (!file.exists()) {
+            return
+        }
+        try {
+            val ride = json.decodeFromString(CompletedRide.serializer(), file.readText(Charsets.UTF_8))
+            if (ride.healthSynced == synced) {
+                return
+            }
+            val updated = ride.copy(healthSynced = synced)
+            val staging = File(historyDirectory, "$safeId.json.tmp")
+            staging.writeText(json.encodeToString(CompletedRide.serializer(), updated), Charsets.UTF_8)
+            if (!staging.renameTo(file)) {
+                staging.copyTo(file, overwrite = true)
+                staging.delete()
+            }
+            upsertIndexEntry(updated.header())
+        } catch (_: Exception) {
+            // Badge is best-effort; never break history reads.
+        }
+    }
+
     /** Source .zwo filenames of completed structured rides (feeds BeginnerPath recommendNext). */
     fun completedFilenames(): Set<String> = listHeaders()
         .mapNotNull { it.sourceWorkoutFilename?.lowercase() }

@@ -1,7 +1,9 @@
 package com.valpr.bikecompanion.ui.history
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -35,6 +39,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -200,6 +205,25 @@ private fun StatItem(value: String, label: String) {
 }
 
 @Composable
+internal fun HealthBadge(synced: Boolean, modifier: Modifier = Modifier) {
+    val bg = if (synced) Color(0xFF004D2C) else Color(0xFF3A3A3A)
+    val fg = if (synced) Color(0xFFA7F3D0) else Color(0xFFBDBDBD)
+    val label = if (synced) "Synced" else "Not synced"
+    val icon = if (synced) Icons.Default.CheckCircle else Icons.Default.CloudOff
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(bg)
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(12.dp))
+            Text(label, fontSize = 10.sp, color = fg, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
 private fun RideHistoryRow(header: RideHeader, onClick: () -> Unit, onDelete: () -> Unit) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -211,7 +235,18 @@ private fun RideHistoryRow(header: RideHeader, onClick: () -> Unit, onDelete: ()
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(header.workoutName, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        header.workoutName,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    HealthBadge(synced = header.healthSynced)
+                }
                 Text(
                     RideHistoryViewModel.formatRideDate(header.startTimeEpochMs),
                     fontSize = 12.sp,

@@ -54,6 +54,11 @@ class RideHistoryViewModel(application: Application) : AndroidViewModel(applicat
         _selectedRide.value = null
     }
 
+    /** Flips the in-memory detail ride to synced without a reload flash. */
+    fun markSelectedRideSynced() {
+        _selectedRide.value = _selectedRide.value?.copy(healthSynced = true)
+    }
+
     fun requestDelete(header: RideHeader) {
         _pendingDelete.value = header
     }

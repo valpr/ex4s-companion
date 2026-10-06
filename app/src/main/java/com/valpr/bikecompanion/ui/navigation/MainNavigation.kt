@@ -207,11 +207,60 @@ fun MainNavigation(
                 historyVm.clearSelection()
                 currentScreen = AppScreen.RIDE_HISTORY
             }
+            val healthManager = app.healthConnectManager
+            val detailSyncState by healthManager.syncState.collectAsState()
+            val detailRide by historyVm.selectedRide.collectAsState()
+            // Tracks which ride the Sync button was pressed for, so a stale
+            // Success from another screen can never badge the wrong ride.
+            var pendingSyncRideId by rememberSaveable { mutableStateOf<String?>(null) }
+            // Clear stale summary-screen state on entry / ride change.
+            androidx.compose.runtime.LaunchedEffect(detailRide?.id) {
+                if (pendingSyncRideId == null) {
+                    healthManager.reset()
+                }
+            }
+            // Persist badge when a re-sync from Ride Detail succeeds. Guarded on
+            // !healthSynced and pending id so the refresh below cannot re-trigger
+            // this effect (previously caused a null -> reload -> Success loop that
+            // flashed the loading spinner indefinitely).
+            androidx.compose.runtime.LaunchedEffect(detailSyncState, detailRide?.id) {
+                val ride = detailRide
+                if (detailSyncState is com.valpr.bikecompanion.health.HealthSyncState.Success &&
+                    ride != null &&
+                    !ride.healthSynced &&
+                    pendingSyncRideId != null &&
+                    ride.id == pendingSyncRideId
+                ) {
+                    try {
+                        app.workoutHistoryRepository.markHealthSynced(ride.id, true)
+                        historyVm.markSelectedRideSynced()
+                        historyVm.refresh()
+                    } catch (_: Exception) {
+                        // Badge is best-effort.
+                    } finally {
+                        pendingSyncRideId = null
+                    }
+                }
+            }
             com.valpr.bikecompanion.ui.history.RideDetailScreen(
                 viewModel = historyVm,
                 onNavigateBack = {
                     historyVm.clearSelection()
                     currentScreen = AppScreen.RIDE_HISTORY
+                },
+                healthSyncState = detailSyncState,
+                onSyncRide = { ride ->
+                    try {
+                        pendingSyncRideId = ride.id
+                        val summary = ride.toSummary()
+                        healthManager.syncWorkout(
+                            summary,
+                            userProfile.weightKg,
+                            app.activeProfileIdOrNull()
+                        )
+                    } catch (_: Exception) {
+                        // Sync manager reports failures via syncState.
+                    }
                 },
                 modifier = modifier
             )
@@ -263,15 +312,6 @@ fun MainNavigation(
                 // the active profile opted in — consent is per-profile).
                 // Persist to local ride history (idempotent on start epoch).
                 LaunchedEffect(summary) {
-                    if (userProfile.healthSyncEnabled) {
-                        healthManager.syncWorkout(
-                            summary,
-                            userProfile.weightKg,
-                            app.activeProfileIdOrNull()
-                        )
-                    } else {
-                        healthManager.reset()
-                    }
                     try {
                         // Prefer the real library filename threaded through startWorkout();
                         // fall back to name-based matching for sessions started before it existed.
@@ -285,6 +325,28 @@ fun MainNavigation(
                         app.workoutHistoryRepository.save(summary, filename)
                     } catch (_: Exception) {
                         // History is best-effort; Health Connect sync must not be affected.
+                    }
+                    if (userProfile.healthSyncEnabled) {
+                        healthManager.syncWorkout(
+                            summary,
+                            userProfile.weightKg,
+                            app.activeProfileIdOrNull()
+                        )
+                    } else {
+                        healthManager.reset()
+                    }
+                }
+                // Persist the Health Connect badge so Ride History still shows
+                // upload status after leaving the summary screen.
+                LaunchedEffect(syncState, summary) {
+                    if (syncState is com.valpr.bikecompanion.health.HealthSyncState.Success) {
+                        try {
+                            val rideId = com.valpr.bikecompanion.history.CompletedRide
+                                .fromSummary(summary).id
+                            app.workoutHistoryRepository.markHealthSynced(rideId, true)
+                        } catch (_: Exception) {
+                            // Badge is best-effort.
+                        }
                     }
                 }
                 WorkoutSummaryScreen(

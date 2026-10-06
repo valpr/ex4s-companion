@@ -43,7 +43,10 @@ import com.valpr.bikecompanion.ui.summary.PowerHistoryChart
 fun RideDetailScreen(
     viewModel: RideHistoryViewModel,
     onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    healthSyncState: com.valpr.bikecompanion.health.HealthSyncState =
+        com.valpr.bikecompanion.health.HealthSyncState.Idle,
+    onSyncRide: (com.valpr.bikecompanion.history.CompletedRide) -> Unit = {}
 ) {
     val ride by viewModel.selectedRide.collectAsState()
 
@@ -126,8 +129,16 @@ fun RideDetailScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    HealthBadge(synced = current.healthSynced)
                 }
             }
+
+            HealthSyncStatusCard(
+                ride = current,
+                state = healthSyncState,
+                onSync = { onSyncRide(current) }
+            )
 
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -215,6 +226,53 @@ fun RideDetailScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun HealthSyncStatusCard(
+    ride: com.valpr.bikecompanion.history.CompletedRide,
+    state: com.valpr.bikecompanion.health.HealthSyncState,
+    onSync: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Stored badge wins for old rides; live state covers an in-flight re-sync.
+    val synced = ride.healthSynced || state is com.valpr.bikecompanion.health.HealthSyncState.Success
+    val title = when {
+        state is com.valpr.bikecompanion.health.HealthSyncState.Syncing -> "Syncing to Health Connect…"
+        synced -> "Synced to Health Connect"
+        state is com.valpr.bikecompanion.health.HealthSyncState.Failed -> "Health Connect sync failed"
+        state is com.valpr.bikecompanion.health.HealthSyncState.PermissionRequired ->
+            "Health Connect permissions needed"
+        state is com.valpr.bikecompanion.health.HealthSyncState.NotAvailable ->
+            "Health Connect unavailable"
+        else -> "Not synced to Health Connect"
+    }
+    val subtitle = when {
+        state is com.valpr.bikecompanion.health.HealthSyncState.Failed -> state.reason
+        synced -> "Session, HR, power, cadence, speed & calories saved"
+        else -> "Upload this ride again without redoing the workout"
+    }
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = if (synced) Color(0xFF00331C) else MaterialTheme.colorScheme.surfaceVariant
+        ),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+            Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(subtitle, fontSize = 12.sp, color = Color.Gray)
+            if (!synced && state !is com.valpr.bikecompanion.health.HealthSyncState.Syncing) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(onClick = onSync, modifier = Modifier.fillMaxWidth()) {
+                    Text("Sync to Health Connect")
+                }
+            }
+            if (state is com.valpr.bikecompanion.health.HealthSyncState.Syncing) {
+                Spacer(modifier = Modifier.height(8.dp))
+                CircularProgressIndicator()
+            }
         }
     }
 }
